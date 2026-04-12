@@ -1,0 +1,419 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ═══════════════════════════════════════════════════════════════
+   ACADEMIC CURATOR — Premium School Management Design System
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Semantic Theme Tokens (Light by default) ─── */
+:root {
+  /* Surfaces */
+  --app-bg: #f8fafc;
+  --card-bg: #ffffff;
+  --card-bg-subtle: #f8fafc;
+  --card-bg-hover: #f8fafc;
+  --row-divider: #f1f5f9;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-muted: #94a3b8;
+  --text-ghost: #cbd5e1;
+
+  /* Borders & subtle */
+  --border-subtle: #f1f5f9;
+  --border-default: #e2e8f0;
+
+  /* Brand */
+  --brand-primary: #002c98;
+  --brand-primary-light: #3b6cf5;
+  --brand-tint: #f0f4ff;
+
+  /* Sidebar */
+  --sidebar-bg-from: #f0f1fb;
+  --sidebar-bg-to: #f8f9fe;
+  --sidebar-item-active: rgba(0, 44, 152, 0.06);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.6);
+  --sidebar-text: rgba(68, 70, 90, 0.7);
+  --sidebar-text-active: #002c98;
+
+  /* Status (consistent across themes) */
+  --status-success: #10b981;
+  --status-success-bg: #ecfdf5;
+  --status-success-text: #047857;
+  --status-warning: #f59e0b;
+  --status-warning-bg: #fffbeb;
+  --status-warning-text: #b45309;
+  --status-danger: #ef4444;
+  --status-danger-bg: #fef2f2;
+  --status-danger-text: #b91c1c;
+  --status-info-bg: #eff6ff;
+  --status-info-text: #1d4ed8;
+}
+
+/* ─── Dark Mode ─── */
+.dark {
+  --app-bg: #0b0d12;
+  --card-bg: #14171f;
+  --card-bg-subtle: #1a1d27;
+  --card-bg-hover: #1f2230;
+  --row-divider: #1e2230;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-muted: #64748b;
+  --text-ghost: #475569;
+
+  --border-subtle: #1e2230;
+  --border-default: #2a2f3e;
+
+  --brand-primary: #4a73e8;
+  --brand-primary-light: #6b8ff0;
+  --brand-tint: rgba(74, 115, 232, 0.12);
+
+  --sidebar-bg-from: #0f1218;
+  --sidebar-bg-to: #0b0d12;
+  --sidebar-item-active: rgba(74, 115, 232, 0.15);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-text: rgba(203, 213, 225, 0.6);
+  --sidebar-text-active: #6b8ff0;
+
+  --status-success: #10b981;
+  --status-success-bg: rgba(16, 185, 129, 0.12);
+  --status-success-text: #34d399;
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-text: #fbbf24;
+  --status-danger: #ef4444;
+  --status-danger-bg: rgba(239, 68, 68, 0.12);
+  --status-danger-text: #f87171;
+  --status-info-bg: rgba(59, 130, 246, 0.12);
+  --status-info-text: #60a5fa;
+}
+
+@theme {
+  /* ─── Colors — Primary ─── */
+  --color-primary: #002c98;
+  --color-primary-container: #1a43bf;
+  --color-primary-light: #3d5fc9;
+  --color-on-primary: #ffffff;
+
+  /* ─── Colors — Secondary (Teal) ─── */
+  --color-secondary: #006970;
+  --color-secondary-container: #004f54;
+  --color-secondary-fixed: #8df2fc;
+  --color-on-secondary-fixed: #002022;
+
+  /* ─── Colors — Tertiary (Deep Red) ─── */
+  --color-tertiary: #790009;
+  --color-tertiary-container: #930012;
+
+  /* ─── Surface Hierarchy (Tonal Layering) ─── */
+  --color-surface: #f8f9fe;
+  --color-surface-container-low: #f0f1fb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container: #e8e9f5;
+  --color-surface-container-high: #e2e3ef;
+  --color-surface-container-highest: #dddee9;
+  --color-background: #f8f9fe;
+
+  /* ─── On-Surface ─── */
+  --color-on-surface: #111318;
+  --color-on-surface-variant: #44465a;
+
+  /* ─── Outline ─── */
+  --color-outline-variant: #c4c5d6;
+
+  /* ─── Status ─── */
+  --color-status-present: #0d7c66;
+  --color-status-absent: #b91c1c;
+  --color-status-late: #d97706;
+
+  /* ─── Typography — Font Families ─── */
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  /* ─── Typography Scale ─── */
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 1.1;
+  --text-display-lg--letter-spacing: -0.025em;
+  --text-display-lg--font-weight: 800;
+
+  --text-display-md: 2.75rem;
+  --text-display-md--line-height: 1.12;
+  --text-display-md--letter-spacing: -0.025em;
+  --text-display-md--font-weight: 800;
+
+  --text-display-sm: 2.25rem;
+  --text-display-sm--line-height: 1.15;
+  --text-display-sm--letter-spacing: -0.02em;
+  --text-display-sm--font-weight: 700;
+
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 1.2;
+  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-lg--font-weight: 700;
+
+  --text-headline-md: 1.625rem;
+  --text-headline-md--line-height: 1.25;
+  --text-headline-md--letter-spacing: -0.015em;
+  --text-headline-md--font-weight: 700;
+
+  --text-headline-sm: 1.375rem;
+  --text-headline-sm--line-height: 1.3;
+  --text-headline-sm--letter-spacing: -0.01em;
+  --text-headline-sm--font-weight: 600;
+
+  --text-title-lg: 1.25rem;
+  --text-title-lg--line-height: 1.35;
+  --text-title-lg--font-weight: 600;
+
+  --text-title-md: 1rem;
+  --text-title-md--line-height: 1.45;
+  --text-title-md--font-weight: 600;
+  --text-title-md--letter-spacing: 0.005em;
+
+  --text-title-sm: 0.875rem;
+  --text-title-sm--line-height: 1.4;
+  --text-title-sm--font-weight: 600;
+
+  --text-body-lg: 1.0625rem;
+  --text-body-lg--line-height: 1.65;
+  --text-body-lg--font-weight: 400;
+
+  --text-body-md: 0.9375rem;
+  --text-body-md--line-height: 1.6;
+  --text-body-md--font-weight: 400;
+
+  --text-body-sm: 0.8125rem;
+  --text-body-sm--line-height: 1.55;
+  --text-body-sm--font-weight: 400;
+
+  --text-label-lg: 0.9375rem;
+  --text-label-lg--line-height: 1.4;
+  --text-label-lg--font-weight: 600;
+
+  --text-label-md: 0.8125rem;
+  --text-label-md--line-height: 1.35;
+  --text-label-md--font-weight: 600;
+
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 1.3;
+  --text-label-sm--font-weight: 500;
+
+  /* ─── Spacing ─── */
+  --spacing-page: 2rem;
+  --spacing-section: 1.5rem;
+  --spacing-card: 1.25rem;
+  --spacing-element: 0.75rem;
+
+  /* ─── Border Radius ─── */
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-full: 9999px;
+
+  /* ─── Shadows — subtle, layered ─── */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 4px 16px 0 rgba(17, 19, 24, 0.04);
+  --shadow-float: 0 4px 12px 0 rgba(0, 0, 0, 0.06), 0 12px 32px 0 rgba(17, 19, 24, 0.08);
+  --shadow-dropdown: 0 8px 24px 0 rgba(0, 0, 0, 0.08), 0 20px 48px 0 rgba(17, 19, 24, 0.12);
+}
+
+/* ═══════════════════════════════════════════
+   Base Reset — "No-Line" Rule enforced
+   ═══════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  border-width: 0;
+  border-style: solid;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+/* ═══════════════════════════════════════════
+   Premium Utility Classes
+   ═══════════════════════════════════════════ */
+
+/* Glass morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.dark .glass {
+  background: rgba(20, 23, 31, 0.82);
+}
+
+/* Primary gradient (135° hero diagonal) */
+.gradient-hero {
+  background: linear-gradient(135deg, #002c98 0%, #1a43bf 50%, #3d5fc9 100%);
+}
+
+/* Subtle shimmer for sidebar active */
+.gradient-sidebar-active {
+  background: linear-gradient(135deg, rgba(0, 44, 152, 0.08) 0%, rgba(26, 67, 191, 0.04) 100%);
+}
+
+/* Premium text gradient */
+.text-gradient {
+  background: linear-gradient(135deg, #002c98, #3d5fc9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══════════════════════════════════════════
+   Scrollbar
+   ═══════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-on-surface-variant);
+}
+
+/* ═══════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Dark Mode — Badge Tint Overrides
+   Transforms Tailwind tint classes to look rich against dark bg.
+   bg-*-50/100 → semi-transparent darker tint (brand color at 12-18%)
+   text-*-600/700 → lighter shade (-400 for better contrast)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Emerald — success */
+.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.14); }
+.dark .bg-emerald-100 { background-color: rgb(16 185 129 / 0.2); }
+.dark .hover\:bg-emerald-100:hover { background-color: rgb(16 185 129 / 0.22); }
+.dark .text-emerald-500 { color: rgb(52 211 153); }
+.dark .text-emerald-600 { color: rgb(52 211 153); }
+.dark .text-emerald-700 { color: rgb(110 231 183); }
+
+/* Blue — primary tint */
+.dark .bg-blue-50 { background-color: rgb(59 130 246 / 0.14); }
+.dark .bg-blue-100 { background-color: rgb(59 130 246 / 0.2); }
+.dark .text-blue-600 { color: rgb(96 165 250); }
+.dark .text-blue-700 { color: rgb(147 197 253); }
+
+/* Violet */
+.dark .bg-violet-50 { background-color: rgb(139 92 246 / 0.14); }
+.dark .text-violet-600 { color: rgb(167 139 250); }
+.dark .text-violet-700 { color: rgb(196 181 253); }
+
+/* Amber — warning */
+.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.14); }
+.dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.2); }
+.dark .text-amber-500 { color: rgb(251 191 36); }
+.dark .text-amber-600 { color: rgb(251 191 36); }
+.dark .text-amber-700 { color: rgb(252 211 77); }
+
+/* Red — danger */
+.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.14); }
+.dark .bg-red-100 { background-color: rgb(239 68 68 / 0.2); }
+.dark .hover\:bg-red-50:hover { background-color: rgb(239 68 68 / 0.14); }
+.dark .hover\:bg-red-100:hover { background-color: rgb(239 68 68 / 0.22); }
+.dark .text-red-400 { color: rgb(252 165 165); }
+.dark .text-red-500 { color: rgb(248 113 113); }
+.dark .text-red-600 { color: rgb(248 113 113); }
+.dark .hover\:text-red-500:hover { color: rgb(248 113 113); }
+
+/* Indigo */
+.dark .bg-indigo-50 { background-color: rgb(99 102 241 / 0.14); }
+.dark .text-indigo-600 { color: rgb(129 140 248); }
+.dark .text-indigo-700 { color: rgb(165 180 252); }
+
+/* Teal */
+.dark .bg-teal-50 { background-color: rgb(20 184 166 / 0.14); }
+.dark .text-teal-600 { color: rgb(45 212 191); }
+.dark .text-teal-700 { color: rgb(94 234 212); }
+
+/* Green (alias of emerald in some places) */
+.dark .bg-green-50 { background-color: rgb(34 197 94 / 0.14); }
+.dark .text-green-600 { color: rgb(74 222 128); }
+
+/* Slate — neutral */
+.dark .bg-slate-50 { background-color: rgb(148 163 184 / 0.12); }
+.dark .text-slate-400 { color: rgb(148 163 184); }
+.dark .text-slate-500 { color: rgb(148 163 184); }
+.dark .text-slate-600 { color: rgb(203 213 225); }
+
+/* Brand tint (used in some hardcoded spots) */
+.dark .bg-\[\#f0f4ff\] { background-color: rgb(74 115 232 / 0.12); }
+.dark .text-\[\#002c98\] { color: rgb(147 197 253); }
+.dark .hover\:text-\[\#002c98\]:hover { color: rgb(147 197 253); }
+
+/* Amber info-banner background */
+.dark .bg-amber-50\/50 { background-color: rgb(245 158 11 / 0.08); }
+
+/* Rejected-applications red banner */
+.dark .bg-\[\#fef2f2\] { background-color: rgb(239 68 68 / 0.1); }

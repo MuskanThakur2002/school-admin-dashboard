@@ -1,0 +1,85 @@
+# The Design System: Academic Authority & Digital Clarity
+ 
+## 1. Overview & Creative North Star: "The Academic Curator"
+The Creative North Star for this design system is **"The Academic Curator."** 
+ 
+In an industry often cluttered with chaotic dashboards and legacy software, this system positions the school management app as a premium, editorial experience. We are moving away from the "generic blue portal" look. Instead, we treat data like a curated gallery. By utilizing intentional asymmetry, high-contrast typography, and a "tonal layering" approach, we provide administrators and educators with a sense of calm authority. The interface doesn't just manage data; it dignifies the educational process through sophisticated, layered surfaces and a rhythmic use of white space.
+ 
+---
+ 
+## 2. Colors: Depth Through Tone
+Our palette is rooted in a deep, authoritative Blue (`primary: #002c98`) and a modern, breathing Teal (`secondary: #006970`). However, the "premium" feel is achieved through how we treat the background and surface layers.
+ 
+### The "No-Line" Rule
+**Borders are a failure of hierarchy.** To maintain an editorial feel, designers are prohibited from using 1px solid borders for sectioning or containers. Boundaries must be defined through:
+- **Background Color Shifts:** Placing a `surface-container-low` component against a `surface` background.
+- **Tonal Transitions:** Using the `surface-container` tiers to define edges naturally.
+ 
+### Surface Hierarchy & Nesting
+Think of the UI as a series of stacked, high-grade paper sheets.
+*   **Base Layer:** `surface` (#faf8ff) or `background` (#faf8ff).
+*   **Sectioning:** Use `surface-container-low` (#f2f3fd) for large sidebar or navigation areas.
+*   **Active Content:** Use `surface-container-lowest` (#ffffff) for the primary content cards to make them "pop" against the slightly darker base.
+*   **Highest Priority:** Reserve `surface-container-highest` (#e1e2ec) for subtle emphasis on inactive or secondary utility areas.
+ 
+### The "Glass & Gradient" Rule
+To avoid a flat, "out-of-the-box" appearance:
+- **Hero & Action Areas:** Use subtle linear gradients transitioning from `primary` (#002c98) to `primary_container` (#1a43bf) at a 135-degree angle.
+- **Floating Overlays:** Use Glassmorphism for modals and dropdowns. Apply `surface_container_lowest` at 80% opacity with a `20px` backdrop blur.
+ 
+---
+ 
+## 3. Typography: Editorial Authority
+We utilize a dual-font strategy to balance character with utility.
+ 
+*   **Display & Headlines (Manrope):** We use Manrope for all `display` and `headline` scales. Its geometric but warm construction provides a modern, "tech-forward" academic feel. 
+    - *Example:* Use `display-md` (2.75rem) for student names in profiles to create a signature, high-end look.
+*   **Body & Labels (Inter):** Inter is our workhorse. It is optimized for legibility in dense data environments.
+    - *Hierarchy Note:* Always maintain a high contrast between a `headline-sm` and `body-md`. Use `on_surface_variant` (#444654) for secondary body text to reduce visual noise while maintaining readability.
+ 
+---
+ 
+## 4. Elevation & Depth: Tonal Layering
+Traditional drop shadows are often messy. We prefer "Tonal Layering" to convey depth.
+ 
+*   **The Layering Principle:** Depth is achieved by stacking. Place a `surface-container-lowest` card (the "sheet") onto a `surface-container-low` background (the "desk"). This creates a soft, natural lift.
+*   **Ambient Shadows:** If a card must "float" (e.g., a dragged schedule item), use a shadow with a 24px blur, 0% spread, and 6% opacity, using the `on_surface` color as the tint.
+*   **The "Ghost Border" Fallback:** If a container requires an edge for accessibility (like a search input), use a "Ghost Border": the `outline_variant` (#c4c5d6) at 20% opacity. **Never use 100% opaque borders.**
+ 
+---
+ 
+## 5. Components: Refined Utility
+ 
+### Buttons
+- **Primary:** Gradient fill (`primary` to `primary_container`), `xl` roundedness (0.75rem), white text.
+- **Secondary:** `secondary_fixed` (#8df2fc) background with `on_secondary_fixed` (#002022) text. No border.
+- **Tertiary:** Text-only using `primary` color, with a subtle `surface_container_high` background on hover.
+ 
+### Cards & Lists
+- **Rule:** Forbid 1px dividers.
+- **Implementation:** Separate student list items using a `1.5` (0.3rem) vertical gap and alternating background tones (e.g., Item 1: `surface`, Item 2: `surface-container-low`).
+- **Roundedness:** All cards must use `xl` (0.75rem) corners to feel approachable and modern.
+ 
+### Status Indicators (The "Attendance" Chips)
+- **Present:** `secondary` (#006970) with 10% opacity background and 100% opacity text. This is a sophisticated "Green" alternative.
+- **Absent:** `tertiary` (#790009) with 10% opacity background and 100% opacity text.
+- **Late:** Use a soft amber (custom) or `primary_fixed_dim`.
+ 
+### Input Fields
+- Use `surface_container_highest` for the input background to create a "recessed" feel. 
+- Avoid boxy borders; use a bottom-weighted `2px` stroke of `primary` only when the field is focused.
+ 
+---
+ 
+## 6. Do's and Don'ts
+ 
+### Do
+- **Do** use `spacing-16` (3.5rem) for page margins to create an "editorial" breathing room.
+- **Do** use `manrope` for numbers in dashboards to give them a custom, high-end feel.
+- **Do** use `full` (9999px) roundedness for small tags and chips, but `xl` (0.75rem) for large containers.
+ 
+### Don't
+- **Don't** use pure black (#000000) for text. Use `on_surface` (#191b22) for better ocular comfort.
+- **Don't** use lines to separate data rows. Use white space and tonal shifts.
+- **Don't** use standard "Material Design" blue. Always stick to the deep `primary` (#002c98) to maintain the "Academic Authority" vibe.
+- **Don't** clutter the screen. If a piece of information isn't vital, hide it in a "details" layer using a `surface-container-low` transition.
