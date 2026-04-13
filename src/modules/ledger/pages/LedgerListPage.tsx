@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, AlertTriangle, CheckCircle2, Search, X, IndianRupee, Loader2 } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle2, Search, X, IndianRupee, Loader2, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useLedgerStore } from '@/stores/ledger.store';
 
@@ -10,6 +10,7 @@ const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
   clear: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   partial: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   overdue: { dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' },
+  overpaid: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
 };
 
 export default function LedgerListPage() {
@@ -34,8 +35,9 @@ export default function LedgerListPage() {
   }), [summaries, search, classFilter, statusFilter]);
 
   const totalCollected = summaries.reduce((s, l) => s + l.totalPaid, 0);
-  const totalOutstanding = summaries.reduce((s, l) => s + l.balance, 0);
+  const totalOutstanding = summaries.reduce((s, l) => s + (l.balance > 0 ? l.balance : 0), 0);
   const overdueCount = summaries.filter((l) => l.status === 'overdue').length;
+  const totalOverpaid = summaries.reduce((s, l) => s + l.overpaymentAmount, 0);
 
   if (loading && summaries.length === 0) {
     return (
@@ -58,11 +60,12 @@ export default function LedgerListPage() {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Total Collected', value: fmt(totalCollected), icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600' },
           { label: 'Outstanding', value: fmt(totalOutstanding), icon: IndianRupee, color: 'bg-amber-50 text-amber-600' },
           { label: 'Overdue Students', value: overdueCount, icon: AlertTriangle, color: 'bg-red-50 text-red-500' },
+          { label: 'Overpaid (Refundable)', value: fmt(totalOverpaid), icon: ArrowDownLeft, color: 'bg-blue-50 text-blue-600' },
         ].map((m) => (
           <div key={m.label} className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div className="flex items-center justify-between mb-3">
@@ -90,7 +93,7 @@ export default function LedgerListPage() {
           ))}
         </div>
         <div className="flex gap-1.5 ml-auto">
-          {['', 'clear', 'partial', 'overdue'].map((s) => (
+          {['', 'clear', 'partial', 'overdue', 'overpaid'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)} className={cn('px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold transition-all', statusFilter === s ? 'bg-[#0f172a] text-white shadow-sm' : 'text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)]')}>
               {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
@@ -118,7 +121,7 @@ export default function LedgerListPage() {
               </div>
               <span className="font-display text-[0.8125rem] font-bold text-[var(--text-secondary)]">{fmt(l.totalDue)}</span>
               <span className="font-display text-[0.8125rem] font-bold text-emerald-600">{fmt(l.totalPaid)}</span>
-              <span className={cn('font-display text-[0.8125rem] font-bold', l.balance > 0 ? 'text-red-500' : 'text-emerald-600')}>{fmt(l.balance)}</span>
+              <span className={cn('font-display text-[0.8125rem] font-bold', l.balance > 0 ? 'text-red-500' : l.balance < 0 ? 'text-blue-600' : 'text-emerald-600')}>{l.balance < 0 ? `(${fmt(Math.abs(l.balance))})` : fmt(l.balance)}</span>
               <span className="text-[0.75rem] text-[var(--text-muted)]">{l.lastPaymentDate}</span>
               <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', st.bg)}>
                 <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />

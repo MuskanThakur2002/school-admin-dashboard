@@ -6,6 +6,8 @@ import type {
   PostPaymentDto,
   BounceReceiptDto,
   CancelReceiptDto,
+  AddSettlementNoteDto,
+  UpdateSettlementStatusDto,
 } from '@/types/receipt.types';
 
 interface ReceiptState {
@@ -17,6 +19,8 @@ interface ReceiptState {
   bounceReceipt: (dto: BounceReceiptDto) => Promise<void>;
   cancelReceipt: (dto: CancelReceiptDto) => Promise<void>;
   resolveBouncedReceipt: (receiptId: string) => Promise<void>;
+  addSettlementNote: (dto: AddSettlementNoteDto) => Promise<void>;
+  updateSettlementStatus: (dto: UpdateSettlementStatusDto) => Promise<void>;
 }
 
 export const useReceiptStore = create<ReceiptState>((set) => ({
@@ -51,6 +55,16 @@ export const useReceiptStore = create<ReceiptState>((set) => ({
 
   resolveBouncedReceipt: async (receiptId: string) => {
     const updated = await receiptApi.resolveBouncedReceipt(receiptId);
+    set((s) => ({ receipts: s.receipts.map((r) => (r.id === updated.id ? updated : r)) }));
+  },
+
+  addSettlementNote: async (dto: AddSettlementNoteDto) => {
+    const updated = await receiptApi.addSettlementNote(dto);
+    set((s) => ({ receipts: s.receipts.map((r) => (r.id === updated.id ? updated : r)) }));
+  },
+
+  updateSettlementStatus: async (dto: UpdateSettlementStatusDto) => {
+    const updated = await receiptApi.updateSettlementStatus(dto);
     set((s) => ({ receipts: s.receipts.map((r) => (r.id === updated.id ? updated : r)) }));
   },
 }));

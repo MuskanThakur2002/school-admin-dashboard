@@ -11,6 +11,14 @@ const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
   cancelled: { dot: 'bg-slate-400', text: 'text-slate-500', bg: 'bg-slate-50' },
 };
 
+const settlementStyle: Record<string, { dot: string; text: string; bg: string }> = {
+  unsettled: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
+  partial: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
+  settled: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+};
+
+const settlementLabel: Record<string, string> = { unsettled: 'Unsettled', partial: 'Partial', settled: 'Settled' };
+
 const modeLabel: Record<string, string> = {
   cash: 'Cash', cheque: 'Cheque', upi: 'UPI', neft: 'NEFT', dd: 'DD', card: 'Card', online: 'Online',
 };
@@ -80,15 +88,16 @@ export default function ReceiptListPage() {
         </div>
       ) : (
         <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="grid grid-cols-[1.2fr_0.8fr_1.8fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-            {['Receipt No.', 'Date', 'Student', 'Amount', 'Mode', 'Reference', 'Status'].map((h) => (
+          <div className="grid grid-cols-[1.2fr_0.8fr_1.8fr_1fr_0.8fr_1fr_0.9fr_0.9fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+            {['Receipt No.', 'Date', 'Student', 'Amount', 'Mode', 'Reference', 'Status', 'Settlement'].map((h) => (
               <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
             ))}
           </div>
           {filtered.map((r, idx) => {
             const st = statusStyle[r.status];
+            const ss = settlementStyle[r.settlementStatus] || settlementStyle.unsettled;
             return (
-              <div key={r.id} className={cn('grid grid-cols-[1.2fr_0.8fr_1.8fr_1fr_1fr_1fr_1fr] gap-4 items-center px-6 py-4 hover:bg-[var(--card-bg-hover)] transition-colors',
+              <div key={r.id} className={cn('grid grid-cols-[1.2fr_0.8fr_1.8fr_1fr_0.8fr_1fr_0.9fr_0.9fr] gap-4 items-center px-6 py-4 hover:bg-[var(--card-bg-hover)] transition-colors',
                 idx < filtered.length - 1 && 'border-b border-[var(--border-subtle)]')}>
                 <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide">{r.receiptNo}</span>
                 <span className="text-[0.75rem] text-[var(--text-muted)]">{r.date}</span>
@@ -102,6 +111,10 @@ export default function ReceiptListPage() {
                 <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', st.bg)}>
                   <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />
                   <span className={cn('text-[0.6875rem] font-semibold capitalize', st.text)}>{r.status}</span>
+                </div>
+                <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', ss.bg)}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full', ss.dot)} />
+                  <span className={cn('text-[0.6875rem] font-semibold', ss.text)}>{settlementLabel[r.settlementStatus] || 'Unsettled'}</span>
                 </div>
               </div>
             );

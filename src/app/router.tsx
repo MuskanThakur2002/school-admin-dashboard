@@ -64,6 +64,8 @@ export const router = createBrowserRouter([
               { path: 'subjects', element: lazyPage(() => import('@/modules/academic-setup/pages/SubjectMappingPage')) },
               { path: 'timetable', element: lazyPage(() => import('@/modules/academic-setup/pages/TimetablePage')) },
               { path: 'promotion', element: lazyPage(() => import('@/modules/academic-setup/pages/PromotionPage')) },
+              { path: 'houses', element: lazyPage(() => import('@/modules/academic-setup/pages/HouseGroupingPage')) },
+              { path: 'rollover', element: lazyPage(() => import('@/modules/academic-setup/pages/RolloverWizardPage')) },
             ],
           },
 
@@ -81,6 +83,7 @@ export const router = createBrowserRouter([
               { path: 'installments', element: lazyPage(() => import('@/modules/fee-engine/pages/InstallmentPlanPage')) },
               { path: 'concessions', element: lazyPage(() => import('@/modules/fee-engine/pages/ConcessionPage')) },
               { path: 'late-fee', element: lazyPage(() => import('@/modules/fee-engine/pages/LateFeeConfigPage')) },
+              { path: 'adjustments', element: lazyPage(() => import('@/modules/fee-engine/pages/ManualAdjustmentPage')) },
             ],
           },
 
@@ -114,9 +117,16 @@ export const router = createBrowserRouter([
 
           // Reports
           { path: 'reports', element: lazyPage(() => import('@/modules/reports/pages/ReportsDashboardPage')) },
+          { path: 'reports/:reportId', element: lazyPage(() => import('@/modules/reports/pages/ReportViewerPage')) },
 
           // Tenants (super-admin)
-          { path: 'tenants', element: lazyPage(() => import('@/modules/tenant/pages/TenantListPage')) },
+          {
+            path: 'tenants',
+            children: [
+              { index: true, element: lazyPage(() => import('@/modules/tenant/pages/TenantListPage')) },
+              { path: ':id', element: lazyPage(() => import('@/modules/tenant/pages/TenantDetailPage')) },
+            ],
+          },
 
           // Settings
           {

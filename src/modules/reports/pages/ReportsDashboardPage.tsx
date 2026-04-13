@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users, IndianRupee, AlertTriangle, CheckCircle2,
   BarChart3, TrendingUp, FileText, Download,
@@ -6,6 +7,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
+import { useReportsStore } from '@/stores/reports.store';
+import { generateCsv, downloadCsv } from '@/utils/csv';
 
 interface ReportType { id: string; name: string; description: string; icon: React.ElementType; color: string; category: string; }
 
@@ -25,12 +28,34 @@ const categories = ['all', 'finance', 'academic', 'system'];
 
 export default function ReportsDashboardPage() {
   const [catFilter, setCatFilter] = useState('all');
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const showToast = useUIStore((s) => s.showToast);
+  const { generateReport } = useReportsStore();
+  const navigate = useNavigate();
 
   const filtered = catFilter === 'all' ? reports : reports.filter((r) => r.category === catFilter);
 
   const handleGenerate = (report: ReportType) => {
-    showToast({ type: 'info', title: 'Generating report', message: `${report.name} — this may take a moment` });
+    navigate(`/reports/${report.id}`);
+  };
+
+  const handleCsvExport = async (report: ReportType) => {
+    setExportingId(report.id);
+    try {
+      const result = await generateReport(report.id);
+      const csvColumns = result.columns.map((col) => ({
+        header: col.label,
+        accessor: (row: Record<string, string | number>) => row[col.key],
+      }));
+      const csv = generateCsv(csvColumns, result.rows);
+      const filename = `${result.title.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}`;
+      downloadCsv(csv, filename);
+      showToast({ type: 'success', title: 'CSV exported', message: `${report.name} downloaded successfully` });
+    } catch {
+      showToast({ type: 'error', title: 'Export failed', message: `Could not generate ${report.name}` });
+    } finally {
+      setExportingId(null);
+    }
   };
 
   return (
@@ -66,9 +91,13 @@ export default function ReportsDashboardPage() {
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[0.75rem] font-semibold bg-[#002c98] text-white shadow-[0_2px_6px_rgba(0,44,152,0.25)] hover:brightness-110 transition-all flex-1 justify-center">
                 <BarChart3 className="w-3.5 h-3.5" /> Generate
               </button>
-              <button onClick={() => handleGenerate(report)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
-                <Download className="w-3.5 h-3.5" strokeWidth={2} /> CSV
+              <button onClick={() => handleCsvExport(report)}
+                disabled={exportingId === report.id}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all',
+                  exportingId === report.id && 'opacity-50 pointer-events-none',
+                )}>
+                <Download className="w-3.5 h-3.5" strokeWidth={2} /> {exportingId === report.id ? '...' : 'CSV'}
               </button>
             </div>
           </div>

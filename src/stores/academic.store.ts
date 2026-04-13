@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { academicApi } from '@/services/modules/academic.api';
 import type {
-  AcademicYear, ClassGroup, Section, Subject, TimetableSlot,
+  AcademicYear, ClassGroup, Section, Subject, TimetableSlot, House,
   CreateAcademicYearDto, CreateClassDto, CreateSectionDto,
-  CreateSubjectDto, CreateTimetableSlotDto,
+  CreateSubjectDto, CreateTimetableSlotDto, CreateHouseDto,
+  RolloverPreview, RolloverRequest, RolloverResult,
 } from '@/types/academic.types';
 
 interface AcademicState {
@@ -11,11 +12,13 @@ interface AcademicState {
   years: AcademicYear[];
   classes: ClassGroup[];
   subjects: Subject[];
+  houses: House[];
 
   // Loading flags
   yearsLoading: boolean;
   classesLoading: boolean;
   subjectsLoading: boolean;
+  housesLoading: boolean;
 
   error: string | null;
 
@@ -40,15 +43,26 @@ interface AcademicState {
   getTimetable: (classId: string, sectionId: string) => Promise<TimetableSlot[]>;
   setTimetableSlot: (dto: CreateTimetableSlotDto) => Promise<TimetableSlot>;
   clearTimetableSlot: (slotId: string) => Promise<void>;
+
+  // ─── Houses ────────────────────────────────────
+  fetchHouses: () => Promise<void>;
+  createHouse: (dto: CreateHouseDto) => Promise<House>;
+  deleteHouse: (id: string) => Promise<void>;
+
+  // ─── Rollover ──────────────────────────────────
+  getRolloverPreview: (sourceYearId: string, targetYearId: string) => Promise<RolloverPreview>;
+  executeRollover: (req: RolloverRequest) => Promise<RolloverResult>;
 }
 
 export const useAcademicStore = create<AcademicState>((set) => ({
   years: [],
   classes: [],
   subjects: [],
+  houses: [],
   yearsLoading: false,
   classesLoading: false,
   subjectsLoading: false,
+  housesLoading: false,
   error: null,
 
   // ─── Years ─────────────────────────────────────
@@ -136,4 +150,38 @@ export const useAcademicStore = create<AcademicState>((set) => ({
   getTimetable: (classId, sectionId) => academicApi.getTimetable(classId, sectionId),
   setTimetableSlot: (dto) => academicApi.setTimetableSlot(dto),
   clearTimetableSlot: (slotId) => academicApi.clearTimetableSlot(slotId),
+
+  // ─── Houses ────────────────────────────────────
+  fetchHouses: async () => {
+    set({ housesLoading: true, error: null });
+    try {
+      const data = await academicApi.getHouses();
+      set({ houses: data, housesLoading: false });
+    } catch (err) {
+      set({ error: (err as Error).message, housesLoading: false });
+    }
+  },
+
+  createHouse: async (dto) => {
+    const created = await academicApi.createHouse(dto);
+    set((state) => ({ houses: [...state.houses, created] }));
+    return created;
+  },
+
+  deleteHouse: async (id) => {
+    await academicApi.deleteHouse(id);
+    set((state) => ({ houses: state.houses.filter((h) => h.id !== id) }));
+  },
+
+  // ─── Rollover ──────────────────────────────────
+  getRolloverPreview: (sourceYearId, targetYearId) =>
+    academicApi.getRolloverPreview(sourceYearId, targetYearId),
+
+  executeRollover: async (req) => {
+    const result = await academicApi.executeRollover(req);
+    // Refresh years after rollover
+    const fresh = await academicApi.getYears();
+    set({ years: fresh });
+    return result;
+  },
 }));

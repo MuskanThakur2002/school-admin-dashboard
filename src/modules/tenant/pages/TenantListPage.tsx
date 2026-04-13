@@ -1,34 +1,45 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Building2, Plus, Users, CheckCircle2, Clock, MapPin, Globe, Settings } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
+import { useTenantStore } from '@/stores/tenant.store';
+import { OnboardingWizard } from '../components/OnboardingWizard';
+import type { TenantPlan, TenantStatus, CreateTenantDto } from '@/types/tenant.types';
 
-interface Tenant { id: string; name: string; domain: string; city: string; state: string; plan: 'starter' | 'growth' | 'enterprise'; students: number; staff: number; status: 'active' | 'onboarding' | 'suspended'; joinDate: string; }
-
-const planStyle: Record<string, { bg: string; text: string }> = {
+const planStyle: Record<TenantPlan, { bg: string; text: string }> = {
   starter: { bg: 'bg-slate-50', text: 'text-slate-600' },
   growth: { bg: 'bg-blue-50', text: 'text-blue-700' },
   enterprise: { bg: 'bg-violet-50', text: 'text-violet-700' },
 };
 
-const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
+const statusStyle: Record<TenantStatus, { dot: string; text: string; bg: string }> = {
   active: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   onboarding: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   suspended: { dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' },
 };
 
-const mockTenants: Tenant[] = [
-  { id: '1', name: 'Delhi Public School — Noida', domain: 'dps-noida.admindesk.io', city: 'Noida', state: 'UP', plan: 'enterprise', students: 2450, staff: 180, status: 'active', joinDate: '2025-01-15' },
-  { id: '2', name: 'Ryan International — Mumbai', domain: 'ryan-mumbai.admindesk.io', city: 'Mumbai', state: 'Maharashtra', plan: 'growth', students: 1200, staff: 95, status: 'active', joinDate: '2025-03-01' },
-  { id: '3', name: 'Greenwood Academy', domain: 'greenwood.admindesk.io', city: 'Bangalore', state: 'Karnataka', plan: 'growth', students: 932, staff: 72, status: 'active', joinDate: '2025-04-01' },
-  { id: '4', name: 'St. Xavier\'s — Kolkata', domain: 'xavier-kol.admindesk.io', city: 'Kolkata', state: 'West Bengal', plan: 'starter', students: 580, staff: 45, status: 'active', joinDate: '2025-06-15' },
-  { id: '5', name: 'Modern Public School', domain: 'modern-ps.admindesk.io', city: 'Jaipur', state: 'Rajasthan', plan: 'starter', students: 0, staff: 0, status: 'onboarding', joinDate: '2026-04-01' },
-];
-
 export default function TenantListPage() {
+  const navigate = useNavigate();
   const showToast = useUIStore((s) => s.showToast);
+  const tenants = useTenantStore((s) => s.tenants);
+  const loading = useTenantStore((s) => s.loading);
+  const fetchTenants = useTenantStore((s) => s.fetchTenants);
+  const createTenant = useTenantStore((s) => s.createTenant);
 
-  const totalStudents = mockTenants.reduce((s, t) => s + t.students, 0);
-  const activeTenants = mockTenants.filter((t) => t.status === 'active').length;
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  useEffect(() => {
+    if (tenants.length === 0) fetchTenants();
+  }, [tenants.length, fetchTenants]);
+
+  const totalStudents = tenants.reduce((s, t) => s + t.students, 0);
+  const activeTenants = tenants.filter((t) => t.status === 'active').length;
+
+  const handleOnboard = async (dto: CreateTenantDto) => {
+    await createTenant(dto);
+    showToast({ type: 'success', title: 'School created', message: `${dto.name} has been onboarded successfully` });
+  };
 
   return (
     <div className="max-w-[1280px]">
@@ -37,8 +48,8 @@ export default function TenantListPage() {
           <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Tenant Management</h1>
           <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">Manage schools and tenants on the platform</p>
         </div>
-        <button onClick={() => showToast({ type: 'info', title: 'Coming soon', message: 'Onboarding wizard will be available in the next update' })}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all">
+        <button onClick={() => setWizardOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all cursor-pointer">
           <Plus className="w-4 h-4" /> Onboard School
         </button>
       </div>
@@ -46,10 +57,10 @@ export default function TenantListPage() {
       {/* Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Total Schools', value: mockTenants.length, icon: Building2, color: 'bg-blue-50 text-blue-600' },
+          { label: 'Total Schools', value: tenants.length, icon: Building2, color: 'bg-blue-50 text-blue-600' },
           { label: 'Active', value: activeTenants, icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600' },
           { label: 'Total Students', value: totalStudents.toLocaleString('en-IN'), icon: Users, color: 'bg-violet-50 text-violet-600' },
-          { label: 'Onboarding', value: mockTenants.filter((t) => t.status === 'onboarding').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
+          { label: 'Onboarding', value: tenants.filter((t) => t.status === 'onboarding').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
         ].map((m) => (
           <div key={m.label} className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div className="flex items-center justify-between mb-3">
@@ -61,9 +72,26 @@ export default function TenantListPage() {
         ))}
       </div>
 
+      {/* Loading skeleton */}
+      {loading && tenants.length === 0 && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              <div className="flex items-center gap-5">
+                <div className="w-12 h-12 rounded-xl bg-[var(--card-bg-hover)] animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 w-64 bg-[var(--card-bg-hover)] rounded-lg animate-pulse" />
+                  <div className="h-4 w-48 bg-[var(--card-bg-hover)] rounded-lg animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Tenant cards */}
       <div className="space-y-3">
-        {mockTenants.map((tenant) => {
+        {tenants.map((tenant) => {
           const ps = planStyle[tenant.plan];
           const ss = statusStyle[tenant.status];
           return (
@@ -102,7 +130,10 @@ export default function TenantListPage() {
                 </div>
 
                 {/* Action */}
-                <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all shrink-0">
+                <button
+                  onClick={() => navigate(`/tenants/${tenant.id}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all shrink-0 cursor-pointer"
+                >
                   <Settings className="w-3.5 h-3.5" strokeWidth={2} /> Configure
                 </button>
               </div>
@@ -110,6 +141,9 @@ export default function TenantListPage() {
           );
         })}
       </div>
+
+      {/* Onboarding Wizard */}
+      <OnboardingWizard open={wizardOpen} onOpenChange={setWizardOpen} onSubmit={handleOnboard} />
     </div>
   );
 }

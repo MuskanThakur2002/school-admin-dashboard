@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar, GraduationCap, BookOpen, Clock, ArrowUpRight,
-  ArrowRight, CheckCircle2, Users, LayoutGrid,
+  ArrowRight, CheckCircle2, Users, LayoutGrid, Flag, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAcademicStore } from '@/stores/academic.store';
@@ -12,15 +12,18 @@ export default function AcademicHubPage() {
   const years = useAcademicStore((s) => s.years);
   const classes = useAcademicStore((s) => s.classes);
   const subjects = useAcademicStore((s) => s.subjects);
+  const houses = useAcademicStore((s) => s.houses);
   const fetchYears = useAcademicStore((s) => s.fetchYears);
   const fetchClasses = useAcademicStore((s) => s.fetchClasses);
   const fetchSubjects = useAcademicStore((s) => s.fetchSubjects);
+  const fetchHouses = useAcademicStore((s) => s.fetchHouses);
 
   useEffect(() => {
     if (years.length === 0) fetchYears();
     if (classes.length === 0) fetchClasses();
     if (subjects.length === 0) fetchSubjects();
-  }, [years.length, classes.length, subjects.length, fetchYears, fetchClasses, fetchSubjects]);
+    if (houses.length === 0) fetchHouses();
+  }, [years.length, classes.length, subjects.length, houses.length, fetchYears, fetchClasses, fetchSubjects, fetchHouses]);
 
   const activeYear = useMemo(() => years.find((y) => y.status === 'active'), [years]);
   const totalSections = useMemo(
@@ -192,6 +195,49 @@ export default function AcademicHubPage() {
           <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Bulk promote students from one class to the next.</p>
           <div className="flex items-center gap-2 pt-3 border-t border-[var(--border-subtle)] text-[0.6875rem] text-[var(--text-muted)]">
             <Users className="w-3 h-3" /> {totalStudents} students eligible
+          </div>
+        </button>
+
+        {/* House Grouping */}
+        <button
+          onClick={() => navigate('/academic/houses')}
+          className="text-left bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all group"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center">
+              <Flag className="w-5 h-5 text-rose-600" strokeWidth={1.8} />
+            </div>
+            <ArrowRight className="w-4 h-4 text-[var(--text-ghost)] group-hover:text-[#002c98] group-hover:translate-x-0.5 transition-all" />
+          </div>
+          <h3 className="text-[0.9375rem] font-bold text-[var(--text-primary)] mb-1">House Grouping</h3>
+          <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Manage school houses and team assignments.</p>
+          <div className="flex items-center gap-4 pt-3 border-t border-[var(--border-subtle)]">
+            <div>
+              <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{houses.length}</p>
+              <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Houses</p>
+            </div>
+            <div>
+              <p className="font-display text-[1.25rem] font-extrabold text-rose-600 leading-none">{houses.reduce((s, h) => s + h.studentCount, 0)}</p>
+              <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Assigned</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Rollover */}
+        <button
+          onClick={() => navigate('/academic/rollover')}
+          className="text-left bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all group"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+              <RotateCcw className="w-5 h-5 text-indigo-600" strokeWidth={1.8} />
+            </div>
+            <ArrowRight className="w-4 h-4 text-[var(--text-ghost)] group-hover:text-[#002c98] group-hover:translate-x-0.5 transition-all" />
+          </div>
+          <h3 className="text-[0.9375rem] font-bold text-[var(--text-primary)] mb-1">Rollover</h3>
+          <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Clone academic structure into a new year.</p>
+          <div className="flex items-center gap-2 pt-3 border-t border-[var(--border-subtle)] text-[0.6875rem] text-[var(--text-muted)]">
+            <RotateCcw className="w-3 h-3" /> Copy classes, sections, subjects & timetable
           </div>
         </button>
       </div>

@@ -1,5 +1,6 @@
 export type PaymentMode = 'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online';
 export type ReceiptStatus = 'confirmed' | 'bounced' | 'cancelled';
+export type SettlementStatus = 'unsettled' | 'partial' | 'settled';
 
 export interface Receipt {
   id: string;
@@ -20,6 +21,15 @@ export interface Receipt {
   bounceReason?: string;
   cancelledDate?: string;
   cancelReason?: string;
+  settlementStatus: SettlementStatus;
+  settlementNotes: SettlementNote[];
+}
+
+export interface SettlementNote {
+  id: string;
+  text: string;
+  createdAt: string;
+  createdBy: string;
 }
 
 export interface PostPaymentDto {
@@ -38,4 +48,14 @@ export interface BounceReceiptDto {
 export interface CancelReceiptDto {
   receiptId: string;
   reason: string;
+}
+
+export interface AddSettlementNoteDto {
+  receiptId: string;
+  text: string;
+}
+
+export interface UpdateSettlementStatusDto {
+  receiptId: string;
+  status: SettlementStatus;
 }

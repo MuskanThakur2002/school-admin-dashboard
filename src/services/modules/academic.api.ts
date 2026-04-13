@@ -6,6 +6,8 @@ import type {
   AcademicYear, ClassGroup, Section, Subject, TimetableSlot,
   CreateAcademicYearDto, CreateClassDto, CreateSectionDto,
   CreateSubjectDto, CreateTimetableSlotDto, DayOfWeek,
+  House, CreateHouseDto, AssignHouseDto,
+  RolloverPreview, RolloverRequest, RolloverResult,
 } from '@/types/academic.types';
 
 const NETWORK_DELAY_MS = 150;
@@ -119,6 +121,13 @@ const seedSlots = (classId: string, sectionId: string): TimetableSlot[] => {
 let timetableDb: TimetableSlot[] = [
   ...seedSlots('c5', 's5a'),
   ...seedSlots('c8', 's8a'),
+];
+
+let housesDb: House[] = [
+  { id: 'h1', name: 'Red House', color: '#DC2626', motto: 'Courage and strength', captainName: 'Aarav Patel', studentCount: 58 },
+  { id: 'h2', name: 'Blue House', color: '#2563EB', motto: 'Wisdom and integrity', captainName: 'Priya Sharma', studentCount: 62 },
+  { id: 'h3', name: 'Green House', color: '#16A34A', motto: 'Growth and harmony', captainName: 'Rohan Gupta', studentCount: 55 },
+  { id: 'h4', name: 'Yellow House', color: '#CA8A04', motto: 'Joy and perseverance', captainName: 'Ananya Reddy', studentCount: 60 },
 ];
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -242,4 +251,60 @@ export const academicApi = {
   },
 
   getPeriods: () => periodTimes,
+
+  // ─── Houses ─────────────────────────────────────────────
+  getHouses: (): Promise<House[]> => delay([...housesDb]),
+
+  createHouse: (dto: CreateHouseDto): Promise<House> => {
+    const house: House = {
+      id: crypto.randomUUID(),
+      name: dto.name,
+      color: dto.color,
+      motto: dto.motto,
+      captainName: dto.captainName ?? '',
+      studentCount: 0,
+    };
+    housesDb = [...housesDb, house];
+    return delay(house);
+  },
+
+  deleteHouse: (id: string): Promise<void> => {
+    housesDb = housesDb.filter((h) => h.id !== id);
+    return delay(undefined);
+  },
+
+  assignStudentToHouse: (_dto: AssignHouseDto): Promise<void> => {
+    // In a real backend this updates the student record
+    const house = housesDb.find((h) => h.id === _dto.houseId);
+    if (house) house.studentCount += 1;
+    return delay(undefined);
+  },
+
+  // ─── Rollover ───────────────────────────────────────────
+  getRolloverPreview: (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
+    const source = yearsDb.find((y) => y.id === sourceYearId);
+    const target = yearsDb.find((y) => y.id === targetYearId);
+    if (!source || !target) return Promise.reject(new Error('Year not found'));
+
+    const sectionCount = classesDb.reduce((sum, c) => sum + c.sections.length, 0);
+    return delay({
+      sourceYear: source,
+      targetYear: target,
+      classCount: classesDb.length,
+      sectionCount,
+      subjectCount: subjectsDb.length,
+      timetableSlotCount: timetableDb.length,
+    });
+  },
+
+  executeRollover: (req: RolloverRequest): Promise<RolloverResult> => {
+    const sectionCount = classesDb.reduce((sum, c) => sum + c.sections.length, 0);
+    // Mock: pretend we cloned everything requested
+    return delay({
+      classesCloned: req.copyClasses ? classesDb.length : 0,
+      sectionsCloned: req.copySections ? sectionCount : 0,
+      subjectsCloned: req.copySubjects ? subjectsDb.length : 0,
+      timetableSlotsCloned: req.copyTimetable ? timetableDb.length : 0,
+    });
+  },
 };

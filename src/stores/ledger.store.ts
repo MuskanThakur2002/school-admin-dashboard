@@ -5,6 +5,7 @@ import type {
   StudentLedgerSummary,
   CreateLedgerEntryDto,
   InitializeLedgerDto,
+  RefundDto,
 } from '@/types/ledger.types';
 
 interface LedgerState {
@@ -15,6 +16,7 @@ interface LedgerState {
   fetchSummaries: () => Promise<void>;
   fetchStudentLedger: (studentId: string) => Promise<void>;
   postPayment: (dto: CreateLedgerEntryDto) => Promise<void>;
+  processRefund: (dto: RefundDto) => Promise<void>;
   initializeLedger: (dto: InitializeLedgerDto) => Promise<void>;
 }
 
@@ -38,6 +40,15 @@ export const useLedgerStore = create<LedgerState>((set) => ({
   postPayment: async (dto: CreateLedgerEntryDto) => {
     await ledgerApi.createEntry(dto);
     // Re-fetch both the student ledger and all summaries
+    const [entries, summaries] = await Promise.all([
+      ledgerApi.getStudentLedger(dto.studentId),
+      ledgerApi.getLedgerSummaries(),
+    ]);
+    set({ entries, summaries });
+  },
+
+  processRefund: async (dto: RefundDto) => {
+    await ledgerApi.processRefund(dto);
     const [entries, summaries] = await Promise.all([
       ledgerApi.getStudentLedger(dto.studentId),
       ledgerApi.getLedgerSummaries(),

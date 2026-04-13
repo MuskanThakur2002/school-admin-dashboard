@@ -91,6 +91,54 @@ export interface CreateTimetableSlotDto {
   teacher: string;
 }
 
+// ─── House / Team Grouping ─────────────────────────────────
+export interface House {
+  id: string;
+  name: string;        // e.g. "Red House"
+  color: string;       // hex color
+  motto: string;
+  captainName: string; // student name or empty
+  studentCount: number;
+}
+
+export interface CreateHouseDto {
+  name: string;
+  color: string;
+  motto: string;
+  captainName?: string;
+}
+
+export interface AssignHouseDto {
+  studentId: string;
+  houseId: string;
+}
+
+// ─── Rollover ──────────────────────────────────────────────
+export interface RolloverPreview {
+  sourceYear: AcademicYear;
+  targetYear: AcademicYear;
+  classCount: number;
+  sectionCount: number;
+  subjectCount: number;
+  timetableSlotCount: number;
+}
+
+export interface RolloverRequest {
+  sourceYearId: string;
+  targetYearId: string;
+  copyClasses: boolean;
+  copySections: boolean;
+  copySubjects: boolean;
+  copyTimetable: boolean;
+}
+
+export interface RolloverResult {
+  classesCloned: number;
+  sectionsCloned: number;
+  subjectsCloned: number;
+  timetableSlotsCloned: number;
+}
+
 // ─── Promotion ─────────────────────────────────────────────
 export interface PromotionStudent {
   id: string;

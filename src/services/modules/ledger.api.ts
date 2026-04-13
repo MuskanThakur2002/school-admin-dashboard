@@ -7,6 +7,7 @@ import type {
   StudentLedgerSummary,
   CreateLedgerEntryDto,
   InitializeLedgerDto,
+  RefundDto,
 } from '@/types/ledger.types';
 import { feeApi } from './fee.api';
 
@@ -36,15 +37,18 @@ const buildSummary = (studentId: string, studentName: string, admissionNo: strin
   const balance = totalDue - totalPaid;
   const credits = entries.filter((e) => e.type === 'credit').sort((a, b) => b.date.localeCompare(a.date));
   const lastPaymentDate = credits.length > 0 ? credits[0].date : '';
+  const overpaymentAmount = balance < 0 ? Math.abs(balance) : 0;
   let status: StudentLedgerSummary['status'] = 'clear';
-  if (balance > 0) {
+  if (balance < 0) {
+    status = 'overpaid';
+  } else if (balance > 0) {
     // overdue if last payment was more than 90 days ago or no payment at all
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
     const cutoffStr = cutoff.toISOString().split('T')[0];
     status = (!lastPaymentDate || lastPaymentDate < cutoffStr) ? 'overdue' : 'partial';
   }
-  return { studentId, studentName, admissionNo, class: cls, section, totalDue, totalPaid, balance, lastPaymentDate, status };
+  return { studentId, studentName, admissionNo, class: cls, section, totalDue, totalPaid, balance, lastPaymentDate, status, overpaymentAmount };
 };
 
 // Student info keyed by ID (mirrors students.api.ts)
@@ -340,6 +344,40 @@ export const ledgerApi = {
     const totalDue = entries.filter((e) => e.type === 'debit').reduce((s, e) => s + e.amount, 0);
     const totalPaid = entries.filter((e) => e.type === 'credit').reduce((s, e) => s + e.amount, 0);
     return delay({ totalDue, totalPaid, balance: totalDue - totalPaid });
+  },
+
+  /**
+   * Process a refund for a student who has overpaid.
+   * Creates a debit entry with category 'refund' to reduce the negative balance.
+   */
+  processRefund: async (dto: RefundDto): Promise<LedgerEntry> => {
+    // Validate the student has an overpayment
+    const entries = entriesDb.filter((e) => e.studentId === dto.studentId);
+    const totalDue = entries.filter((e) => e.type === 'debit').reduce((s, e) => s + e.amount, 0);
+    const totalPaid = entries.filter((e) => e.type === 'credit').reduce((s, e) => s + e.amount, 0);
+    const balance = totalDue - totalPaid;
+
+    if (balance >= 0) throw new Error('Student has no overpayment to refund');
+    if (dto.amount > Math.abs(balance)) throw new Error('Refund amount exceeds overpayment');
+
+    const today = new Date().toISOString().split('T')[0];
+    const entry: LedgerEntry = {
+      id: nextId(),
+      studentId: dto.studentId,
+      date: today,
+      description: `Refund processed — ${dto.mode.toUpperCase()}`,
+      type: 'debit',
+      category: 'refund',
+      amount: dto.amount,
+      mode: dto.mode,
+      reference: dto.reference,
+      balance: 0,
+      remarks: dto.reason,
+      createdBy: 'admin',
+    };
+    entriesDb.push(entry);
+    recalcBalances(dto.studentId);
+    return delay(entry);
   },
 
   /** Register a dynamically admitted student's info for summary lookups. */
