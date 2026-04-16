@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, UserPlus, GraduationCap, Users, Wallet, BookOpen,
+  LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, Wallet, BookOpen,
   Receipt, CreditCard, Bell, BarChart3, Building2, Settings,
   ChevronLeft, ChevronRight, Sparkles,
 } from 'lucide-react';
@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { label: 'Admissions', path: '/admissions', icon: UserPlus, permission: 'admissions.read' },
   { label: 'Academic', path: '/academic', icon: GraduationCap, permission: 'academic.read' },
   { label: 'Students', path: '/students', icon: Users, permission: 'students.read' },
+  { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
   { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read' },
   { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },
   { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: 'expenses.read' },
@@ -85,7 +86,7 @@ export function Sidebar() {
       `}</style>
       <aside
         className={cn(
-          'fixed left-0 top-0 bottom-0 z-30 flex flex-col transition-all duration-300 ease-out',
+          'fixed left-0 top-0 bottom-0 z-30 flex-col transition-all duration-300 ease-out hidden md:flex',
           collapsed ? 'w-[72px]' : 'w-[250px]',
         )}
         style={{

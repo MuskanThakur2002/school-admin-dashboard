@@ -20,6 +20,7 @@ const permissionGroups = [
   { group: 'Admissions', permissions: ['admissions.read', 'admissions.write'] },
   { group: 'Academic', permissions: ['academic.read', 'academic.write'] },
   { group: 'Students', permissions: ['students.read', 'students.write'] },
+  { group: 'Teachers', permissions: ['teachers.read', 'teachers.write'] },
   { group: 'Fees', permissions: ['fees.read', 'fees.write'] },
   { group: 'Ledger', permissions: ['ledger.read', 'ledger.write'] },
   { group: 'Expenses', permissions: ['expenses.read', 'expenses.write'] },

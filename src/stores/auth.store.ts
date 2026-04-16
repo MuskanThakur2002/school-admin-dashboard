@@ -18,6 +18,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         'admissions.read', 'admissions.write',
         'academic.read', 'academic.write',
         'students.read', 'students.write',
+        'teachers.read', 'teachers.write',
         'fees.read', 'fees.write',
         'ledger.read', 'ledger.write',
         'expenses.read', 'expenses.write',

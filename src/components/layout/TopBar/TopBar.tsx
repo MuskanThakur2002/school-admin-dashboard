@@ -18,7 +18,7 @@ export function TopBar() {
         'px-8 glass',
         'shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]',
         'transition-all duration-300',
-        collapsed ? 'left-[72px]' : 'left-[250px]',
+        collapsed ? 'left-0 md:left-[72px]' : 'left-0 md:left-[250px]',
       )}
     >
       {/* Search */}
