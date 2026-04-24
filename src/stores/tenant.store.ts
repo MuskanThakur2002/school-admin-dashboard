@@ -21,6 +21,7 @@ interface TenantState {
   updateAccess: (id: string, dto: UpdateAccessDto) => Promise<Tenant>;
   suspendTenant: (id: string) => Promise<Tenant>;
   activateTenant: (id: string) => Promise<Tenant>;
+  deleteTenant: (id: string) => Promise<void>;
 }
 
 export const useTenantStore = create<TenantState>((set) => ({
@@ -74,5 +75,10 @@ export const useTenantStore = create<TenantState>((set) => ({
     const updated = await tenantApi.activateTenant(id);
     set((state) => ({ tenants: state.tenants.map((t) => (t.id === id ? updated : t)) }));
     return updated;
+  },
+
+  deleteTenant: async (id) => {
+    await tenantApi.deleteTenant(id);
+    set((state) => ({ tenants: state.tenants.filter((t) => t.id !== id) }));
   },
 }));

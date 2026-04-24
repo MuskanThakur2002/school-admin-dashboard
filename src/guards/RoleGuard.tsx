@@ -1,15 +1,24 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
-import type { UserRole } from '@/types/auth.types';
+import { isSuperAdmin } from '@/types/auth.types';
 
 interface RoleGuardProps {
-  roles: UserRole[];
+  /** Role names that may view this route. Matched against `user.roleName`. */
+  roles?: string[];
+  /** Shortcut for super-admin-only routes. */
+  superAdminOnly?: boolean;
 }
 
-export function RoleGuard({ roles }: RoleGuardProps) {
+export function RoleGuard({ roles, superAdminOnly }: RoleGuardProps) {
   const user = useAuthStore((s) => s.user);
 
-  if (!user || !roles.includes(user.role)) {
+  if (!user) return <Navigate to="/dashboard" replace />;
+
+  if (superAdminOnly && !isSuperAdmin(user)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (roles && !roles.includes(user.roleName)) {
     return <Navigate to="/dashboard" replace />;
   }
 

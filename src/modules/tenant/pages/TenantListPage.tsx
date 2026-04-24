@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Plus, Users, CheckCircle2, Clock, MapPin, Globe, Settings } from 'lucide-react';
+import { Building2, Plus, Users, CheckCircle2, Clock, MapPin, Globe, Settings, ArrowRight } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useTenantStore } from '@/stores/tenant.store';
 import { OnboardingWizard } from '../components/OnboardingWizard';
 import type { TenantPlan, TenantStatus, CreateTenantDto } from '@/types/tenant.types';
@@ -26,6 +27,12 @@ export default function TenantListPage() {
   const loading = useTenantStore((s) => s.loading);
   const fetchTenants = useTenantStore((s) => s.fetchTenants);
   const createTenant = useTenantStore((s) => s.createTenant);
+  const setActiveSchool = useAuthStore((s) => s.setActiveSchool);
+
+  const handleEnter = (id: string) => {
+    setActiveSchool(id);
+    navigate('/dashboard');
+  };
 
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -129,13 +136,22 @@ export default function TenantListPage() {
                   </div>
                 </div>
 
-                {/* Action */}
-                <button
-                  onClick={() => navigate(`/tenants/${tenant.id}`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all shrink-0 cursor-pointer"
-                >
-                  <Settings className="w-3.5 h-3.5" strokeWidth={2} /> Configure
-                </button>
+                {/* Actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => navigate(`/tenants/${tenant.id}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5" strokeWidth={2} /> Configure
+                  </button>
+                  <button
+                    onClick={() => handleEnter(tenant.id)}
+                    disabled={tenant.status === 'suspended'}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold bg-[#002c98] text-white shadow-[0_2px_6px_rgba(0,44,152,0.25)] hover:brightness-110 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Enter <ArrowRight className="w-3.5 h-3.5" strokeWidth={2} />
+                  </button>
+                </div>
               </div>
             </div>
           );

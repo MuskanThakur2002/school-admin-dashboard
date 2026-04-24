@@ -3,6 +3,8 @@ import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
 import { useThemeStore } from '@/stores/theme.store';
+import { isSuperAdmin } from '@/types/auth.types';
+import { SchoolSwitcher } from './SchoolSwitcher';
 
 export function TopBar() {
   const user = useAuthStore((s) => s.user);
@@ -45,6 +47,9 @@ export function TopBar() {
 
       {/* Right actions */}
       <div className="flex items-center gap-2">
+        {/* School switcher — super admins only */}
+        {isSuperAdmin(user) && <SchoolSwitcher />}
+
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -91,7 +96,7 @@ export function TopBar() {
           </div>
           <div className="hidden lg:block text-left">
             <p className="text-[0.8125rem] font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>{user?.name}</p>
-            <p className="text-[0.6875rem] capitalize mt-0.5" style={{ color: 'var(--text-muted)' }}>{user?.role?.replace('_', ' ')}</p>
+            <p className="text-[0.6875rem] capitalize mt-0.5" style={{ color: 'var(--text-muted)' }}>{user?.roleName}</p>
           </div>
           <ChevronDown className="w-3.5 h-3.5 hidden lg:block" style={{ color: 'var(--text-ghost)' }} />
         </button>

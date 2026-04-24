@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth.store';
+import { isSuperAdmin } from '@/types/auth.types';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://school.qbitlog.com/api';
 
 class ApiError extends Error {
   status: number;
@@ -15,13 +16,19 @@ class ApiError extends Error {
 }
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const { token } = useAuthStore.getState();
+  const { token, user, activeSchoolId } = useAuthStore.getState();
+
+  // Super admins can drill into a specific school. The backend reads this
+  // header to scope nested resources (students, fees, etc.). School admins
+  // are already scoped by their JWT and never send this header.
+  const sendSchoolScope = isSuperAdmin(user) && !!activeSchoolId;
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(sendSchoolScope ? { 'X-School-Id': activeSchoolId as string } : {}),
       ...options?.headers,
     },
   });

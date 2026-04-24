@@ -21,8 +21,9 @@ export function LoginPage() {
     try {
       await login(email, password);
       navigate('/dashboard');
-    } catch {
-      setError('Invalid email or password');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError((err as Error)?.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -135,12 +136,6 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-8 pt-6 relative">
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-outline-variant/30 to-transparent" />
-            <p className="text-[0.75rem] text-on-surface-variant/40 text-center">
-              Demo mode — enter any email &amp; password to sign in
-            </p>
-          </div>
         </div>
       </div>
     </div>

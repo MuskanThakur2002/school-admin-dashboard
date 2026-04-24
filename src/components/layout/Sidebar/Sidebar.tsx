@@ -6,13 +6,17 @@ import {
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { useTenantStore } from '@/stores/tenant.store';
 import { usePermission } from '@/hooks/usePermission';
+import { isSuperAdmin } from '@/types/auth.types';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
   permission?: string;
+  superAdminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -27,13 +31,23 @@ const navItems: NavItem[] = [
   { label: 'Receipts', path: '/receipts', icon: Receipt, permission: 'receipts.read' },
   { label: 'Notifications', path: '/notifications', icon: Bell, permission: 'notifications.read' },
   { label: 'Reports', path: '/reports', icon: BarChart3, permission: 'reports.read' },
-  { label: 'Tenants', path: '/tenants', icon: Building2, permission: 'settings.manage' },
+  { label: 'Tenants', path: '/tenants', icon: Building2, superAdminOnly: true },
   { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' },
 ];
 
 function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+  const user = useAuthStore((s) => s.user);
+  const activeSchoolId = useAuthStore((s) => s.activeSchoolId);
   const hasPermission = usePermission(item.permission ?? 'dashboard.read');
-  if (!hasPermission) return null;
+
+  if (item.superAdminOnly) {
+    if (!isSuperAdmin(user)) return null;
+  } else if (isSuperAdmin(user)) {
+    // Super admins only see school-scoped links once they've drilled into a school.
+    if (!activeSchoolId) return null;
+  } else if (item.permission && !hasPermission) {
+    return null;
+  }
 
   return (
     <NavLink
@@ -63,6 +77,13 @@ function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const user = useAuthStore((s) => s.user);
+  const activeSchoolId = useAuthStore((s) => s.activeSchoolId);
+  const tenants = useTenantStore((s) => s.tenants);
+  const activeSchool =
+    isSuperAdmin(user) && activeSchoolId
+      ? tenants.find((t) => t.id === activeSchoolId) ?? null
+      : null;
 
   return (
     <>
@@ -112,6 +133,27 @@ export function Sidebar() {
 
         {/* Divider */}
         <div className="mx-4 h-px mb-2" style={{ background: 'linear-gradient(to right, transparent, var(--border-default), transparent)' }} />
+
+        {/* Active school banner (super admin viewing a specific school) */}
+        {activeSchool && !collapsed && (
+          <div
+            className="mx-3 mb-2 px-3 py-2 rounded-lg"
+            style={{ background: 'var(--brand-tint)' }}
+          >
+            <p
+              className="text-[0.625rem] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: 'var(--brand-primary)' }}
+            >
+              Viewing
+            </p>
+            <p
+              className="text-[0.8125rem] font-bold truncate mt-0.5"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {activeSchool.name}
+            </p>
+          </div>
+        )}
 
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto px-3 py-1 space-y-0.5">
