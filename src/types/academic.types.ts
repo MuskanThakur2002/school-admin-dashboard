@@ -3,50 +3,80 @@ export type AcademicYearStatus = 'active' | 'upcoming' | 'archived';
 
 export interface AcademicYear {
   id: string;
+  schoolId?: string;
   name: string; // e.g. "2025-26"
   startDate: string;
   endDate: string;
-  status: AcademicYearStatus;
-  totalStudents: number;
-  totalClasses: number;
+  isCurrent: boolean;
+  status: AcademicYearStatus; // UI-derived from isCurrent
+  totalStudents?: number;
+  totalClasses?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateAcademicYearDto {
   name: string;
   startDate: string;
   endDate: string;
+  isCurrent: boolean;
 }
 
+export type UpdateAcademicYearDto = Partial<CreateAcademicYearDto>;
+
 // ─── Section ───────────────────────────────────────────────
+// Backend stores: { section, classMasterId, academicYearId, status, schoolId }.
+// `classTeacher`/`studentCount`/`capacity` are kept on the type with mapper-
+// supplied defaults so legacy mock-driven pages (Timetable, AcademicHub)
+// keep compiling until they migrate to real data.
 export interface Section {
   id: string;
-  name: string;
+  name: string; // backend `section` (e.g. "A")
+  classMasterId?: string;
+  academicYearId?: string;
+  status?: string | null;
+  schoolId?: string;
+  createdAt?: string;
+  updatedAt?: string;
   classTeacher: string;
   studentCount: number;
   capacity: number;
 }
 
 export interface CreateSectionDto {
-  classId: string;
-  name: string;
-  classTeacher: string;
-  capacity?: number;
+  classMasterId: string;
+  academicYearId: string;
+  section: string;
 }
 
+export type UpdateSectionDto = Partial<{
+  section: string;
+  classMasterId: string;
+  academicYearId: string;
+}>;
+
 // ─── Class ─────────────────────────────────────────────────
+// Backend stores: { name, gradeLevel, schoolId }. `shortName` and `grade`
+// are populated by the API mapper (defaulting to `name` and `gradeLevel`)
+// so dependent pages (Promotion, Timetable, SubjectMapping) keep compiling.
 export interface ClassGroup {
   id: string;
-  name: string; // e.g. "Class V"
-  shortName: string; // e.g. "V"
-  grade: number; // numeric for sorting
+  name: string; // e.g. "3rd standard"
+  gradeLevel: number;
   sections: Section[];
+  schoolId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  shortName: string;
+  grade: number;
 }
 
 export interface CreateClassDto {
   name: string;
-  shortName: string;
-  grade: number;
+  gradeLevel: number;
 }
+
+export type UpdateClassDto = Partial<CreateClassDto>;
 
 // ─── Subject ───────────────────────────────────────────────
 export type SubjectType = 'core' | 'elective' | 'activity';

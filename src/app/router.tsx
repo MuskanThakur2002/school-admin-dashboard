@@ -93,6 +93,10 @@ export const router = createBrowserRouter([
               { path: 'teachers', element: lazyPage(() => import('@/modules/teachers/pages/TeacherListPage')) },
               { path: 'teachers/:id', element: lazyPage(() => import('@/modules/teachers/pages/TeacherProfilePage')) },
 
+              // Parents
+              { path: 'parents', element: lazyPage(() => import('@/modules/parents/pages/ParentListPage')) },
+              { path: 'parents/:id', element: lazyPage(() => import('@/modules/parents/pages/ParentProfilePage')) },
+
               // Fee Engine
               {
                 path: 'fees',

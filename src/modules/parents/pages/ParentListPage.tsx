@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Download, Search, X, Phone, Users, Calendar, Trash2,
+  Plus, Download, Search, X, Phone, Users, Wallet, Trash2,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { useTeacherStore, type CreateTeacherFlowDto } from '@/stores/teacher.store';
-import type { Teacher } from '@/types/teacher.types';
+import { useParentStore, type CreateParentFlowDto } from '@/stores/parent.store';
+import type { Parent } from '@/types/parent.types';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
@@ -13,14 +13,23 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 
-export default function TeacherListPage() {
+function formatIncome(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default function ParentListPage() {
   const navigate = useNavigate();
-  const teachers = useTeacherStore((s) => s.teachers);
-  const total = useTeacherStore((s) => s.total);
-  const loading = useTeacherStore((s) => s.loading);
-  const fetchTeachers = useTeacherStore((s) => s.fetchTeachers);
-  const createTeacher = useTeacherStore((s) => s.createTeacher);
-  const deleteTeacher = useTeacherStore((s) => s.deleteTeacher);
+  const parents = useParentStore((s) => s.parents);
+  const total = useParentStore((s) => s.total);
+  const loading = useParentStore((s) => s.loading);
+  const fetchParents = useParentStore((s) => s.fetchParents);
+  const createParent = useParentStore((s) => s.createParent);
+  const deleteParent = useParentStore((s) => s.deleteParent);
 
   const roles = useSettingsStore((s) => s.roles);
   const fetchRoles = useSettingsStore((s) => s.fetchRoles);
@@ -30,19 +39,19 @@ export default function TeacherListPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchTeachers(1, 50);
-  }, [fetchTeachers]);
+    fetchParents(1, 50);
+  }, [fetchParents]);
 
   const filteredData = useMemo(() => {
-    if (!search.trim()) return teachers;
+    if (!search.trim()) return parents;
     const q = search.toLowerCase();
-    return teachers.filter((t) => {
-      const name = t.user?.name?.toLowerCase() ?? '';
-      const email = t.user?.email?.toLowerCase() ?? '';
-      const empId = t.employeeId?.toLowerCase() ?? '';
-      return name.includes(q) || email.includes(q) || empId.includes(q);
+    return parents.filter((p) => {
+      const name = p.user?.name?.toLowerCase() ?? '';
+      const email = p.user?.email?.toLowerCase() ?? '';
+      const phone = p.user?.phoneNumber?.toLowerCase() ?? '';
+      return name.includes(q) || email.includes(q) || phone.includes(q);
     });
-  }, [teachers, search]);
+  }, [parents, search]);
 
   const openModal = () => {
     setModalOpen(true);
@@ -51,13 +60,13 @@ export default function TeacherListPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
-    if (!confirm(`Delete teacher ${name}?`)) return;
+    if (!confirm(`Delete parent ${name}?`)) return;
     try {
-      await deleteTeacher(id);
-      showToast({ type: 'info', title: 'Teacher deleted', message: name });
+      await deleteParent(id);
+      showToast({ type: 'info', title: 'Parent deleted', message: name });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      showToast({ type: 'error', title: 'Failed to delete teacher', message });
+      showToast({ type: 'error', title: 'Failed to delete parent', message });
     }
   };
 
@@ -66,8 +75,8 @@ export default function TeacherListPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Teachers</h1>
-          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} teachers on staff</p>
+          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Parents</h1>
+          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} parents on record</p>
         </div>
         <div className="flex gap-2.5">
           <button className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[0.8125rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
@@ -79,7 +88,7 @@ export default function TeacherListPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add Teacher
+            Add Parent
           </button>
         </div>
       </div>
@@ -88,7 +97,7 @@ export default function TeacherListPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[0.75rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em]">Total Teachers</span>
+            <span className="text-[0.75rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em]">Total Parents</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <Users className="w-4 h-4" strokeWidth={2} />
             </div>
@@ -114,7 +123,7 @@ export default function TeacherListPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, employee ID, email..."
+            placeholder="Search by name, email, phone..."
             className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
           />
           {search && (
@@ -127,22 +136,22 @@ export default function TeacherListPage() {
 
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="grid grid-cols-[1.2fr_2.5fr_2fr_1.2fr_1fr_0.4fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Emp. ID', 'Teacher', 'Email', 'Phone', 'Hire Date', ''].map((h) => (
+        <div className="grid grid-cols-[2.5fr_2fr_1.2fr_1.2fr_0.4fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          {['Parent', 'Email', 'Phone', 'Annual Income', ''].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
 
         {loading && (
           <div className="py-16 text-center">
-            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading teachers...</p>
+            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading parents...</p>
           </div>
         )}
 
-        {!loading && filteredData.map((teacher, idx) => {
-          const name = teacher.user?.name ?? '—';
-          const email = teacher.user?.email ?? '—';
-          const phone = teacher.user?.phoneNumber ?? '—';
+        {!loading && filteredData.map((parent, idx) => {
+          const name = parent.user?.name ?? '—';
+          const email = parent.user?.email ?? '—';
+          const phone = parent.user?.phoneNumber ?? '—';
           const initials = name
             .split(/\s+/)
             .filter(Boolean)
@@ -151,15 +160,13 @@ export default function TeacherListPage() {
             .join('') || '?';
           return (
             <div
-              key={teacher.id}
-              onClick={() => navigate(`/teachers/${teacher.id}`)}
+              key={parent.id}
+              onClick={() => navigate(`/parents/${parent.id}`)}
               className={cn(
-                'grid grid-cols-[1.2fr_2.5fr_2fr_1.2fr_1fr_0.4fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
+                'grid grid-cols-[2.5fr_2fr_1.2fr_1.2fr_0.4fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
                 idx < filteredData.length - 1 && 'border-b border-[var(--border-subtle)]',
               )}
             >
-              <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide">{teacher.employeeId}</span>
-
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0">
                   <span className="text-white text-[0.625rem] font-bold">{initials}</span>
@@ -175,14 +182,14 @@ export default function TeacherListPage() {
               </div>
 
               <div className="flex items-center gap-1 text-[0.75rem] text-[var(--text-muted)]">
-                <Calendar className="w-3 h-3" strokeWidth={1.8} />
-                <span>{teacher.hireDate}</span>
+                <Wallet className="w-3 h-3" strokeWidth={1.8} />
+                <span>{formatIncome(parent.annualIncome)}</span>
               </div>
 
               <button
-                onClick={(e) => handleDelete(e, teacher.id, name)}
+                onClick={(e) => handleDelete(e, parent.id, name)}
                 className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors justify-self-end"
-                aria-label="Delete teacher"
+                aria-label="Delete parent"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -193,41 +200,40 @@ export default function TeacherListPage() {
         {!loading && filteredData.length === 0 && (
           <div className="py-16 text-center">
             <Search className="w-10 h-10 text-[#e2e8f0] mx-auto mb-3" />
-            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No teachers found</p>
-            <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">{search ? 'Try adjusting your search' : 'Add your first teacher to get started'}</p>
+            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No parents found</p>
+            <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">{search ? 'Try adjusting your search' : 'Add your first parent to get started'}</p>
           </div>
         )}
 
         <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filteredData.length} of {total} teachers</p>
+          <p className="text-[0.75rem] text-[var(--text-muted)]">{filteredData.length} of {total} parents</p>
         </div>
       </div>
 
-      <AddTeacherModal
+      <AddParentModal
         open={modalOpen}
         onOpenChange={setModalOpen}
         roles={roles}
-        onCreate={createTeacher}
-        onSuccess={(name) => showToast({ type: 'success', title: 'Teacher added', message: name })}
-        onError={(message) => showToast({ type: 'error', title: 'Failed to add teacher', message })}
+        onCreate={createParent}
+        onSuccess={(name) => showToast({ type: 'success', title: 'Parent added', message: name })}
+        onError={(message) => showToast({ type: 'error', title: 'Failed to add parent', message })}
       />
     </div>
   );
 }
 
-// ─── Add Teacher modal ────────────────────────────────────────
+// ─── Add Parent modal ────────────────────────────────────────
 
-interface AddTeacherModalProps {
+interface AddParentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   roles: { id: string; name: string }[];
-  onCreate: (input: CreateTeacherFlowDto) => Promise<Teacher>;
+  onCreate: (input: CreateParentFlowDto) => Promise<Parent>;
   onSuccess: (name: string) => void;
   onError: (message: string) => void;
 }
 
-function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onError }: AddTeacherModalProps) {
-  const today = new Date().toISOString().split('T')[0];
+function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onError }: AddParentModalProps) {
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -236,14 +242,13 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
     address: '',
     whatsapp: '',
     roleId: '',
-    employeeId: '',
-    hireDate: today,
+    annualIncome: '',
   });
   const [saving, setSaving] = useState(false);
 
   const reset = () => setForm({
     name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
-    roleId: '', employeeId: '', hireDate: today,
+    roleId: '', annualIncome: '',
   });
 
   const handleClose = (next: boolean) => {
@@ -254,13 +259,15 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
   const update = <K extends keyof typeof form>(key: K, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  const incomeNumber = Number(form.annualIncome);
+  const incomeValid = form.annualIncome.trim() !== '' && Number.isFinite(incomeNumber) && incomeNumber >= 0;
+
   const canSubmit =
     form.name.trim() &&
     form.email.trim() &&
     form.password.trim() &&
     form.roleId &&
-    form.employeeId.trim() &&
-    form.hireDate;
+    incomeValid;
 
   const handleSubmit = async () => {
     if (!canSubmit || saving) return;
@@ -277,9 +284,8 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
           roleId: form.roleId,
           isActive: true,
         },
-        teacher: {
-          employeeId: form.employeeId.trim(),
-          hireDate: form.hireDate,
+        parent: {
+          annualIncome: incomeNumber,
         },
       });
       onSuccess(form.name.trim());
@@ -297,14 +303,14 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
     <Modal
       open={open}
       onOpenChange={handleClose}
-      title="Add Teacher"
-      description="Creates a user account, then links them as a teacher."
+      title="Add Parent"
+      description="Creates a user account, then links them as a parent."
       size="lg"
       footer={
         <>
           <Button variant="tertiary" onClick={() => handleClose(false)} disabled={saving}>Cancel</Button>
           <Button variant="primary" onClick={handleSubmit} loading={saving} disabled={!canSubmit}>
-            Create Teacher
+            Create Parent
           </Button>
         </>
       }
@@ -313,8 +319,8 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
         <div>
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Pramod Kumar" />
-            <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="teacher@school.edu" />
+            <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Rajesh Patel" />
+            <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="parent@example.com" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
             <Select
               label="Role *"
@@ -323,8 +329,8 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
               options={roleOptions}
               placeholder={roles.length === 0 ? 'Loading roles...' : 'Select a role'}
             />
-            <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9311314401" />
-            <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9311314401" />
+            <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9876543210" />
+            <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9876543210" />
             <div className="md:col-span-2">
               <Input label="Address" value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="Street, city, state" />
             </div>
@@ -332,10 +338,16 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
         </div>
 
         <div>
-          <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Teacher details</p>
+          <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Parent details</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Employee ID *" value={form.employeeId} onChange={(e) => update('employeeId', e.target.value)} placeholder="EMP-001" />
-            <Input label="Hire date *" type="date" value={form.hireDate} onChange={(e) => update('hireDate', e.target.value)} />
+            <Input
+              label="Annual income (INR) *"
+              type="number"
+              min={0}
+              value={form.annualIncome}
+              onChange={(e) => update('annualIncome', e.target.value)}
+              placeholder="100000"
+            />
           </div>
         </div>
       </div>

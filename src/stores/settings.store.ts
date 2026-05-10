@@ -4,10 +4,15 @@
  * When backend exists, replace seed arrays with API calls.
  */
 import { create } from 'zustand';
+import { rolesApi } from '@/services/modules/roles.api';
+import { useAuthStore } from '@/stores/auth.store';
+import { isSuperAdmin } from '@/types/auth.types';
+import type { Role } from '@/types/role.types';
 // date-fns used by pages that consume this store, not here directly
 
+export type { Role };
+
 // ─── Types ─────��───────────────────────────────────────────
-export interface Role { id: string; name: string; description: string; userCount: number; permissions: string[]; isSystem: boolean; }
 export interface Holiday { id: string; name: string; date: string; type: 'national' | 'regional' | 'school'; recurring: boolean; }
 export interface PaymentMode { id: string; name: string; code: string; enabled: boolean; requiresReference: boolean; }
 export interface DocType { id: string; name: string; required: boolean; maxSizeMB: number; allowedFormats: string[]; }
@@ -15,28 +20,6 @@ export interface GradeRule { id: string; grade: string; minPct: number; maxPct: 
 export interface ChannelConfig { id: string; channel: string; enabled: boolean; provider: string; settings: { label: string; value: string }[]; }
 
 // ─── Seed data ─��───────────────────────────────────────────
-const permissionGroups = [
-  { group: 'Dashboard', permissions: ['dashboard.read'] },
-  { group: 'Admissions', permissions: ['admissions.read', 'admissions.write'] },
-  { group: 'Academic', permissions: ['academic.read', 'academic.write'] },
-  { group: 'Students', permissions: ['students.read', 'students.write'] },
-  { group: 'Teachers', permissions: ['teachers.read', 'teachers.write'] },
-  { group: 'Fees', permissions: ['fees.read', 'fees.write'] },
-  { group: 'Ledger', permissions: ['ledger.read', 'ledger.write'] },
-  { group: 'Expenses', permissions: ['expenses.read', 'expenses.write'] },
-  { group: 'Receipts', permissions: ['receipts.read', 'receipts.write'] },
-  { group: 'Notifications', permissions: ['notifications.read', 'notifications.write'] },
-  { group: 'Reports', permissions: ['reports.read'] },
-  { group: 'Settings', permissions: ['settings.manage'] },
-];
-
-let rolesDb: Role[] = [
-  { id: 'r1', name: 'Super Admin', description: 'Full access to all modules', userCount: 1, permissions: permissionGroups.flatMap((g) => g.permissions), isSystem: true },
-  { id: 'r2', name: 'School Admin', description: 'Full access to school operations', userCount: 3, permissions: permissionGroups.flatMap((g) => g.permissions).filter((p) => p !== 'settings.manage'), isSystem: true },
-  { id: 'r3', name: 'Office Staff', description: 'Admissions, fees, receipts, reports', userCount: 5, permissions: ['dashboard.read', 'admissions.read', 'admissions.write', 'students.read', 'fees.read', 'fees.write', 'ledger.read', 'receipts.read', 'receipts.write', 'reports.read'], isSystem: false },
-  { id: 'r4', name: 'Accountant', description: 'Financial modules only', userCount: 2, permissions: ['dashboard.read', 'fees.read', 'fees.write', 'ledger.read', 'ledger.write', 'expenses.read', 'expenses.write', 'receipts.read', 'receipts.write', 'reports.read'], isSystem: false },
-];
-
 let holidaysDb: Holiday[] = [
   { id: 'h1', name: 'Republic Day', date: '2026-01-26', type: 'national', recurring: true },
   { id: 'h2', name: 'Holi', date: '2026-03-17', type: 'national', recurring: false },
@@ -94,9 +77,9 @@ interface SettingsState {
 
   // Roles
   fetchRoles: () => Promise<void>;
-  createRole: (r: Omit<Role, 'id' | 'isSystem' | 'userCount'>) => void;
-  updateRole: (id: string, patch: Partial<Role>) => void;
-  deleteRole: (id: string) => void;
+  createRole: (r: { name: string; permissions: string[] }) => Promise<Role>;
+  updateRole: (id: string, patch: { name: string; permissions: string[] }) => Promise<Role>;
+  deleteRole: (id: string) => Promise<void>;
 
   // Holidays
   fetchHolidays: () => Promise<void>;
@@ -122,31 +105,50 @@ interface SettingsState {
   // Channels
   fetchChannels: () => Promise<void>;
   toggleChannel: (id: string) => void;
-
-  // Helpers
-  getPermissionGroups: () => typeof permissionGroups;
 }
 
 const d = async () => { await new Promise((r) => setTimeout(r, 100)); };
+
+function resolveSchoolId(): string {
+  const { user, activeSchoolId } = useAuthStore.getState();
+  const id = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+  if (!id) throw new Error('No active school selected');
+  return id;
+}
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   roles: [], holidays: [], paymentModes: [], docTypes: [], grades: [], channels: [],
   loading: false,
 
   // Roles
-  fetchRoles: async () => { await d(); set({ roles: [...rolesDb] }); },
-  createRole: (r) => {
-    const role: Role = { id: crypto.randomUUID(), ...r, userCount: 0, isSystem: false };
-    rolesDb.push(role);
-    set((s) => ({ roles: [...s.roles, role] }));
+  fetchRoles: async () => {
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) { set({ roles: [] }); return; }
+    set({ loading: true });
+    try {
+      const res = await rolesApi.list(schoolId, { page: 1, limit: 100 });
+      set({ roles: res.data, loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
-  updateRole: (id, patch) => {
-    const idx = rolesDb.findIndex((r) => r.id === id);
-    if (idx !== -1) rolesDb[idx] = { ...rolesDb[idx], ...patch };
-    set((s) => ({ roles: s.roles.map((r) => r.id === id ? { ...r, ...patch } : r) }));
+
+  createRole: async (r) => {
+    const schoolId = resolveSchoolId();
+    const created = await rolesApi.create(schoolId, r);
+    set((s) => ({ roles: [created, ...s.roles] }));
+    return created;
   },
-  deleteRole: (id) => {
-    rolesDb = rolesDb.filter((r) => r.id !== id);
+  updateRole: async (id, patch) => {
+    const schoolId = resolveSchoolId();
+    const updated = await rolesApi.update(schoolId, id, patch);
+    set((s) => ({ roles: s.roles.map((r) => r.id === id ? updated : r) }));
+    return updated;
+  },
+  deleteRole: async (id) => {
+    const schoolId = resolveSchoolId();
+    await rolesApi.remove(schoolId, id);
     set((s) => ({ roles: s.roles.filter((r) => r.id !== id) }));
   },
 
@@ -210,6 +212,4 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (ch) ch.enabled = !ch.enabled;
     set((s) => ({ channels: s.channels.map((c) => c.id === id ? { ...c, enabled: !c.enabled } : c) }));
   },
-
-  getPermissionGroups: () => permissionGroups,
 }));

@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { academicApi } from '@/services/modules/academic.api';
 import type {
   AcademicYear, ClassGroup, Section, Subject, TimetableSlot, House,
-  CreateAcademicYearDto, CreateClassDto, CreateSectionDto,
+  CreateAcademicYearDto,
+  CreateClassDto, UpdateClassDto, CreateSectionDto, UpdateSectionDto,
   CreateSubjectDto, CreateTimetableSlotDto, CreateHouseDto,
   RolloverPreview, RolloverRequest, RolloverResult,
 } from '@/types/academic.types';
@@ -30,9 +31,11 @@ interface AcademicState {
   // ─── Classes & Sections ────────────────────────
   fetchClasses: () => Promise<void>;
   createClass: (dto: CreateClassDto) => Promise<ClassGroup>;
+  updateClass: (id: string, dto: UpdateClassDto) => Promise<ClassGroup>;
   deleteClass: (id: string) => Promise<void>;
   addSection: (dto: CreateSectionDto) => Promise<Section>;
-  deleteSection: (classId: string, sectionId: string) => Promise<void>;
+  updateSection: (sectionId: string, dto: UpdateSectionDto) => Promise<Section>;
+  deleteSection: (sectionId: string) => Promise<void>;
 
   // ─── Subjects ──────────────────────────────────
   fetchSubjects: () => Promise<void>;
@@ -106,6 +109,13 @@ export const useAcademicStore = create<AcademicState>((set) => ({
     return created;
   },
 
+  updateClass: async (id, dto) => {
+    const updated = await academicApi.updateClass(id, dto);
+    const fresh = await academicApi.getClasses();
+    set({ classes: fresh });
+    return updated;
+  },
+
   deleteClass: async (id) => {
     await academicApi.deleteClass(id);
     set((state) => ({ classes: state.classes.filter((c) => c.id !== id) }));
@@ -118,8 +128,15 @@ export const useAcademicStore = create<AcademicState>((set) => ({
     return section;
   },
 
-  deleteSection: async (classId, sectionId) => {
-    await academicApi.deleteSection(classId, sectionId);
+  updateSection: async (sectionId, dto) => {
+    const updated = await academicApi.updateSection(sectionId, dto);
+    const fresh = await academicApi.getClasses();
+    set({ classes: fresh });
+    return updated;
+  },
+
+  deleteSection: async (sectionId) => {
+    await academicApi.deleteSection(sectionId);
     const fresh = await academicApi.getClasses();
     set({ classes: fresh });
   },

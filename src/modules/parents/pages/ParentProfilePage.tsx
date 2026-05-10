@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, User, Calendar, Phone, Mail, Briefcase,
+  ArrowLeft, User, Calendar, Phone, Mail, Wallet,
 } from 'lucide-react';
-import { useTeacherStore } from '@/stores/teacher.store';
-import type { Teacher } from '@/types/teacher.types';
+import { useParentStore } from '@/stores/parent.store';
+import type { Parent } from '@/types/parent.types';
+
+function formatIncome(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -29,12 +38,12 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: Rea
   );
 }
 
-export default function TeacherProfilePage() {
+export default function ParentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const getTeacher = useTeacherStore((s) => s.getTeacher);
+  const getParent = useParentStore((s) => s.getParent);
 
-  const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [parent, setParent] = useState<Parent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,42 +51,42 @@ export default function TeacherProfilePage() {
     if (!id) return;
     setLoading(true);
     setError(null);
-    getTeacher(id)
-      .then((t) => setTeacher(t))
+    getParent(id)
+      .then((p) => setParent(p))
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, [id, getTeacher]);
+  }, [id, getParent]);
 
   if (loading) {
     return (
       <div className="max-w-[1280px]">
         <div className="bg-[var(--card-bg)] rounded-2xl py-16 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <p className="text-[0.875rem] text-[var(--text-muted)]">Loading teacher profile...</p>
+          <p className="text-[0.875rem] text-[var(--text-muted)]">Loading parent profile...</p>
         </div>
       </div>
     );
   }
 
-  if (error || !teacher) {
+  if (error || !parent) {
     return (
       <div className="max-w-[1280px]">
         <button
-          onClick={() => navigate('/teachers')}
+          onClick={() => navigate('/parents')}
           className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors mb-6"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Teachers
+          <ArrowLeft className="w-4 h-4" /> Back to Parents
         </button>
         <div className="bg-[var(--card-bg)] rounded-2xl py-16 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <p className="text-[0.875rem] font-semibold text-red-600 mb-1">Teacher not found</p>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{error || `No teacher found with ID: ${id}`}</p>
+          <p className="text-[0.875rem] font-semibold text-red-600 mb-1">Parent not found</p>
+          <p className="text-[0.75rem] text-[var(--text-muted)]">{error || `No parent found with ID: ${id}`}</p>
         </div>
       </div>
     );
   }
 
-  const name = teacher.user?.name ?? '—';
-  const email = teacher.user?.email ?? '—';
-  const phone = teacher.user?.phoneNumber ?? '—';
+  const name = parent.user?.name ?? '—';
+  const email = parent.user?.email ?? '—';
+  const phone = parent.user?.phoneNumber ?? '—';
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -88,10 +97,10 @@ export default function TeacherProfilePage() {
   return (
     <div className="max-w-[1280px]">
       <button
-        onClick={() => navigate('/teachers')}
+        onClick={() => navigate('/parents')}
         className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors mb-6"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to Teachers
+        <ArrowLeft className="w-4 h-4" /> Back to Parents
       </button>
 
       <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
@@ -105,12 +114,12 @@ export default function TeacherProfilePage() {
               {name}
             </h1>
             <p className="text-[0.8125rem] text-[var(--text-tertiary)]">
-              {teacher.employeeId}
+              {formatIncome(parent.annualIncome)} / year
             </p>
             <div className="flex flex-wrap items-center gap-4 mt-2 text-[0.75rem] text-[var(--text-muted)]">
               <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {phone}</span>
               <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {email}</span>
-              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Joined: {teacher.hireDate}</span>
+              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Added: {parent.createdAt?.split('T')[0] ?? ''}</span>
             </div>
           </div>
         </div>
@@ -122,15 +131,15 @@ export default function TeacherProfilePage() {
             <Field label="Name" value={name} />
             <Field label="Email" value={email} />
             <Field label="Phone" value={phone} />
-            <Field label="User ID" value={teacher.userId} />
+            <Field label="User ID" value={parent.userId} />
           </div>
         </SectionCard>
-        <SectionCard title="Employment" icon={Briefcase}>
+        <SectionCard title="Parent details" icon={Wallet}>
           <div className="grid grid-cols-2 gap-x-6">
-            <Field label="Employee ID" value={teacher.employeeId} />
-            <Field label="Hire Date" value={teacher.hireDate} />
-            <Field label="Created" value={teacher.createdAt?.split('T')[0] ?? ''} />
-            <Field label="Updated" value={teacher.updatedAt?.split('T')[0] ?? ''} />
+            <Field label="Annual Income" value={formatIncome(parent.annualIncome)} />
+            <Field label="Parent ID" value={parent.id} />
+            <Field label="Created" value={parent.createdAt?.split('T')[0] ?? ''} />
+            <Field label="Updated" value={parent.updatedAt?.split('T')[0] ?? ''} />
           </div>
         </SectionCard>
       </div>

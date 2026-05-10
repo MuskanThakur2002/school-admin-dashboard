@@ -1,7 +1,8 @@
 import type { ParentGuardian } from '@/types/student.types';
 
-export type EnquirySource = 'walk_in' | 'online' | 'referral' | 'advertisement';
-export type EnquiryStatus = 'new' | 'contacted' | 'converted' | 'closed';
+/** Free-form source label as captured by the school (e.g. "Walk-in", "Phone Call"). */
+export type EnquirySource = string;
+export type EnquiryStatus = 'new' | 'contacted' | 'converted' | 'lost';
 
 export interface Enquiry {
   id: string;
@@ -93,6 +94,10 @@ export interface CreateEnquiryDto {
   classInterest: string;
   source?: EnquirySource;
   notes?: string;
+}
+
+export interface UpdateEnquiryDto extends CreateEnquiryDto {
+  status: EnquiryStatus;
 }
 
 /**

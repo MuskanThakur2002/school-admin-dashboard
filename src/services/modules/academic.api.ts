@@ -1,10 +1,14 @@
 /**
  * Academic Setup API Layer
- * Backend-swap point — replace function bodies with fetch() calls.
+ * Academic Years, Classes (class-masters), and Sections (class-sections) use
+ * the real backend. Subjects, timetable, houses, and rollover are still mocked.
  */
+import { api } from '@/services/api-client';
+import { useAuthStore } from '@/stores/auth.store';
 import type {
   AcademicYear, ClassGroup, Section, Subject, TimetableSlot,
-  CreateAcademicYearDto, CreateClassDto, CreateSectionDto,
+  CreateAcademicYearDto, UpdateAcademicYearDto,
+  CreateClassDto, UpdateClassDto, CreateSectionDto, UpdateSectionDto,
   CreateSubjectDto, CreateTimetableSlotDto, DayOfWeek,
   House, CreateHouseDto, AssignHouseDto,
   RolloverPreview, RolloverRequest, RolloverResult,
@@ -14,58 +18,115 @@ const NETWORK_DELAY_MS = 150;
 const delay = <T>(data: T): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(data), NETWORK_DELAY_MS));
 
+// ─── Academic Year backend wire format & mappers ──────────
+interface BackendAcademicYear {
+  id: string;
+  schoolId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiEnvelope<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+interface PaginatedEnvelope<T> {
+  success: boolean;
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  message?: string;
+}
+
+function resolveSchoolId(): string {
+  const { activeSchoolId, user } = useAuthStore.getState();
+  const schoolId = activeSchoolId ?? user?.schoolId ?? null;
+  if (!schoolId) {
+    throw new Error('No active school selected. Please choose a school first.');
+  }
+  return schoolId;
+}
+
+function mapYear(b: BackendAcademicYear): AcademicYear {
+  return {
+    id: b.id,
+    schoolId: b.schoolId,
+    name: b.name,
+    startDate: b.startDate,
+    endDate: b.endDate,
+    isCurrent: b.isCurrent,
+    status: b.isCurrent ? 'active' : 'upcoming',
+    totalStudents: 0,
+    totalClasses: 0,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
+// ─── Class Master / Section backend wire format & mappers ─
+interface BackendClassMaster {
+  id: string;
+  schoolId: string;
+  name: string;
+  gradeLevel: number;
+  createdAt?: string;
+  updatedAt?: string;
+  classSections?: BackendClassSection[];
+}
+
+interface BackendClassSection {
+  id: string;
+  schoolId: string;
+  classMasterId: string;
+  academicYearId: string;
+  section: string;
+  status?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  classMaster?: BackendClassMaster;
+  academicYear?: BackendAcademicYear;
+}
+
+function mapSection(b: BackendClassSection): Section {
+  return {
+    id: b.id,
+    name: b.section,
+    classMasterId: b.classMasterId,
+    academicYearId: b.academicYearId,
+    status: b.status ?? null,
+    schoolId: b.schoolId,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+    // Defaults for legacy mock-driven UI compatibility:
+    classTeacher: '',
+    studentCount: 0,
+    capacity: 0,
+  };
+}
+
+function mapClass(b: BackendClassMaster, sections: Section[] = []): ClassGroup {
+  return {
+    id: b.id,
+    name: b.name,
+    gradeLevel: b.gradeLevel,
+    sections,
+    schoolId: b.schoolId,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+    // Legacy aliases for sibling pages still on mock data:
+    shortName: b.name,
+    grade: b.gradeLevel,
+  };
+}
+
 // ─── Mock DBs ──────────────────────────────────────────────
-
-let yearsDb: AcademicYear[] = [
-  { id: 'y1', name: '2025-26', startDate: '2025-04-01', endDate: '2026-03-31', status: 'active', totalStudents: 932, totalClasses: 36 },
-  { id: 'y2', name: '2026-27', startDate: '2026-04-01', endDate: '2027-03-31', status: 'upcoming', totalStudents: 0, totalClasses: 0 },
-  { id: 'y3', name: '2024-25', startDate: '2024-04-01', endDate: '2025-03-31', status: 'archived', totalStudents: 891, totalClasses: 34 },
-];
-
-let classesDb: ClassGroup[] = [
-  {
-    id: 'c1', name: 'Class I', shortName: 'I', grade: 1,
-    sections: [
-      { id: 's1a', name: 'A', classTeacher: 'Ms. Priya Sharma', studentCount: 32, capacity: 40 },
-      { id: 's1b', name: 'B', classTeacher: 'Ms. Anjali Gupta', studentCount: 30, capacity: 40 },
-    ],
-  },
-  {
-    id: 'c2', name: 'Class II', shortName: 'II', grade: 2,
-    sections: [
-      { id: 's2a', name: 'A', classTeacher: 'Ms. Sunita Reddy', studentCount: 35, capacity: 40 },
-    ],
-  },
-  {
-    id: 'c5', name: 'Class V', shortName: 'V', grade: 5,
-    sections: [
-      { id: 's5a', name: 'A', classTeacher: 'Mr. Amit Verma', studentCount: 38, capacity: 45 },
-      { id: 's5b', name: 'B', classTeacher: 'Ms. Sunita Devi', studentCount: 36, capacity: 45 },
-      { id: 's5c', name: 'C', classTeacher: 'Mr. Rajesh Patel', studentCount: 34, capacity: 45 },
-    ],
-  },
-  {
-    id: 'c8', name: 'Class VIII', shortName: 'VIII', grade: 8,
-    sections: [
-      { id: 's8a', name: 'A', classTeacher: 'Dr. Suresh Iyer', studentCount: 40, capacity: 45 },
-      { id: 's8b', name: 'B', classTeacher: 'Ms. Kavita Reddy', studentCount: 38, capacity: 45 },
-    ],
-  },
-  {
-    id: 'c10', name: 'Class X', shortName: 'X', grade: 10,
-    sections: [
-      { id: 's10a', name: 'A', classTeacher: 'Mr. Deepak Joshi', studentCount: 42, capacity: 45 },
-      { id: 's10b', name: 'B', classTeacher: 'Ms. Meena Nair', studentCount: 40, capacity: 45 },
-    ],
-  },
-  {
-    id: 'c12', name: 'Class XII', shortName: 'XII', grade: 12,
-    sections: [
-      { id: 's12a', name: 'A (Science)', classTeacher: 'Dr. Arun Mehta', studentCount: 35, capacity: 40 },
-      { id: 's12b', name: 'B (Commerce)', classTeacher: 'Mr. Vikram Shah', studentCount: 30, capacity: 40 },
-    ],
-  },
-];
 
 let subjectsDb: Subject[] = [
   { id: 'sub1', name: 'English', code: 'ENG', type: 'core', classes: ['I', 'II', 'V', 'VIII', 'X', 'XII'] },
@@ -131,7 +192,7 @@ let housesDb: House[] = [
 ];
 
 // ─── Helpers ───────────────────────────────────────────────
-const sortClasses = (arr: ClassGroup[]) => [...arr].sort((a, b) => a.grade - b.grade);
+const sortClasses = (arr: ClassGroup[]) => [...arr].sort((a, b) => a.gradeLevel - b.gradeLevel);
 
 // ═════════════════════════════════════════════════════════════════
 // PUBLIC API
@@ -139,65 +200,153 @@ const sortClasses = (arr: ClassGroup[]) => [...arr].sort((a, b) => a.grade - b.g
 
 export const academicApi = {
   // ─── Academic Years ─────────────────────────────────────
-  getYears: (): Promise<AcademicYear[]> => delay([...yearsDb]),
-
-  createYear: (dto: CreateAcademicYearDto): Promise<AcademicYear> => {
-    const year: AcademicYear = {
-      id: crypto.randomUUID(),
-      name: dto.name, startDate: dto.startDate, endDate: dto.endDate,
-      status: 'upcoming', totalStudents: 0, totalClasses: 0,
-    };
-    yearsDb = [year, ...yearsDb];
-    return delay(year);
+  /** GET /schools/:schoolId/academic-years */
+  getYears: async (): Promise<AcademicYear[]> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<PaginatedEnvelope<BackendAcademicYear>>(
+      `/schools/${schoolId}/academic-years?page=1&limit=100`,
+    );
+    return (res.data ?? []).map(mapYear);
   },
 
-  activateYear: (id: string): Promise<AcademicYear> => {
-    yearsDb = yearsDb.map((y) => ({
-      ...y,
-      status: y.id === id ? 'active' : (y.status === 'active' ? 'archived' : y.status),
-    }));
-    const year = yearsDb.find((y) => y.id === id);
-    if (!year) return Promise.reject(new Error('Year not found'));
-    return delay(year);
+  /** GET /schools/:schoolId/academic-years/:id */
+  getYear: async (id: string): Promise<AcademicYear> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<ApiEnvelope<BackendAcademicYear>>(
+      `/schools/${schoolId}/academic-years/${id}`,
+    );
+    return mapYear(res.data);
   },
 
-  // ─── Classes & Sections ─────────────────────────────────
-  getClasses: (): Promise<ClassGroup[]> => delay(sortClasses(classesDb)),
-
-  createClass: (dto: CreateClassDto): Promise<ClassGroup> => {
-    const cls: ClassGroup = {
-      id: crypto.randomUUID(),
-      name: dto.name, shortName: dto.shortName, grade: dto.grade,
-      sections: [],
-    };
-    classesDb = sortClasses([...classesDb, cls]);
-    return delay(cls);
+  /** POST /schools/:schoolId/academic-years */
+  createYear: async (dto: CreateAcademicYearDto): Promise<AcademicYear> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<ApiEnvelope<BackendAcademicYear>>(
+      `/schools/${schoolId}/academic-years`,
+      dto,
+    );
+    return mapYear(res.data);
   },
 
-  deleteClass: (id: string): Promise<void> => {
-    classesDb = classesDb.filter((c) => c.id !== id);
-    return delay(undefined);
+  /** PUT /schools/:schoolId/academic-years/:id */
+  updateYear: async (id: string, dto: UpdateAcademicYearDto): Promise<AcademicYear> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.put<ApiEnvelope<BackendAcademicYear>>(
+      `/schools/${schoolId}/academic-years/${id}`,
+      dto,
+    );
+    return mapYear(res.data);
   },
 
-  addSection: (dto: CreateSectionDto): Promise<Section> => {
-    const cls = classesDb.find((c) => c.id === dto.classId);
-    if (!cls) return Promise.reject(new Error('Class not found'));
-    const section: Section = {
-      id: crypto.randomUUID(),
-      name: dto.name,
-      classTeacher: dto.classTeacher,
-      studentCount: 0,
-      capacity: dto.capacity ?? 40,
-    };
-    cls.sections = [...cls.sections, section];
-    return delay(section);
+  /** Activate by setting isCurrent=true via PUT. */
+  activateYear: async (id: string): Promise<AcademicYear> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.put<ApiEnvelope<BackendAcademicYear>>(
+      `/schools/${schoolId}/academic-years/${id}`,
+      { isCurrent: true },
+    );
+    return mapYear(res.data);
   },
 
-  deleteSection: (classId: string, sectionId: string): Promise<void> => {
-    const cls = classesDb.find((c) => c.id === classId);
-    if (!cls) return Promise.reject(new Error('Class not found'));
-    cls.sections = cls.sections.filter((s) => s.id !== sectionId);
-    return delay(undefined);
+  /** DELETE /schools/:schoolId/academic-years/:id */
+  deleteYear: async (id: string): Promise<void> => {
+    const schoolId = resolveSchoolId();
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/academic-years/${id}`);
+  },
+
+  // ─── Classes (class-masters) & Sections (class-sections) ──
+  /**
+   * GET /schools/:schoolId/class-masters and /class-sections in parallel,
+   * then merge sections under their parent class. The list endpoints don't
+   * accept a filter for the active academic year, so we pull everything and
+   * group client-side.
+   */
+  getClasses: async (): Promise<ClassGroup[]> => {
+    const schoolId = resolveSchoolId();
+    const [classRes, sectionRes] = await Promise.all([
+      api.get<PaginatedEnvelope<BackendClassMaster>>(
+        `/schools/${schoolId}/class-masters?page=1&limit=100`,
+      ),
+      api.get<PaginatedEnvelope<BackendClassSection>>(
+        `/schools/${schoolId}/class-sections?page=1&limit=500`,
+      ),
+    ]);
+
+    const sectionsByClass = new Map<string, Section[]>();
+    for (const s of sectionRes.data ?? []) {
+      const list = sectionsByClass.get(s.classMasterId) ?? [];
+      list.push(mapSection(s));
+      sectionsByClass.set(s.classMasterId, list);
+    }
+
+    const merged = (classRes.data ?? []).map((c) =>
+      mapClass(c, (sectionsByClass.get(c.id) ?? []).sort((a, b) => a.name.localeCompare(b.name))),
+    );
+    return sortClasses(merged);
+  },
+
+  /** GET /schools/:schoolId/class-masters/:id */
+  getClass: async (id: string): Promise<ClassGroup> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<ApiEnvelope<BackendClassMaster>>(
+      `/schools/${schoolId}/class-masters/${id}`,
+    );
+    const sections = (res.data.classSections ?? []).map(mapSection);
+    return mapClass(res.data, sections);
+  },
+
+  /** POST /schools/:schoolId/class-masters */
+  createClass: async (dto: CreateClassDto): Promise<ClassGroup> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<ApiEnvelope<BackendClassMaster>>(
+      `/schools/${schoolId}/class-masters`,
+      { name: dto.name, gradeLevel: dto.gradeLevel },
+    );
+    return mapClass(res.data);
+  },
+
+  /** PUT /schools/:schoolId/class-masters/:id */
+  updateClass: async (id: string, dto: UpdateClassDto): Promise<ClassGroup> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.put<ApiEnvelope<BackendClassMaster>>(
+      `/schools/${schoolId}/class-masters/${id}`,
+      dto,
+    );
+    return mapClass(res.data);
+  },
+
+  /** DELETE /schools/:schoolId/class-masters/:id */
+  deleteClass: async (id: string): Promise<void> => {
+    const schoolId = resolveSchoolId();
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/class-masters/${id}`);
+  },
+
+  /** POST /schools/:schoolId/class-sections */
+  addSection: async (dto: CreateSectionDto): Promise<Section> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<ApiEnvelope<BackendClassSection>>(
+      `/schools/${schoolId}/class-sections`,
+      dto,
+    );
+    return mapSection(res.data);
+  },
+
+  /** PUT /schools/:schoolId/class-sections/:id */
+  updateSection: async (id: string, dto: UpdateSectionDto): Promise<Section> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.put<ApiEnvelope<BackendClassSection>>(
+      `/schools/${schoolId}/class-sections/${id}`,
+      dto,
+    );
+    return mapSection(res.data);
+  },
+
+  /** DELETE /schools/:schoolId/class-sections/:id */
+  deleteSection: async (sectionId: string): Promise<void> => {
+    const schoolId = resolveSchoolId();
+    await api.delete<ApiEnvelope<unknown>>(
+      `/schools/${schoolId}/class-sections/${sectionId}`,
+    );
   },
 
   // ─── Subjects ───────────────────────────────────────────
@@ -281,27 +430,31 @@ export const academicApi = {
   },
 
   // ─── Rollover ───────────────────────────────────────────
-  getRolloverPreview: (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
-    const source = yearsDb.find((y) => y.id === sourceYearId);
-    const target = yearsDb.find((y) => y.id === targetYearId);
-    if (!source || !target) return Promise.reject(new Error('Year not found'));
+  // Subjects / timetable counts are still mocked. Class & section counts now
+  // come from the real backend via getClasses().
+  getRolloverPreview: async (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
+    const [years, classes] = await Promise.all([academicApi.getYears(), academicApi.getClasses()]);
+    const source = years.find((y) => y.id === sourceYearId);
+    const target = years.find((y) => y.id === targetYearId);
+    if (!source || !target) throw new Error('Year not found');
 
-    const sectionCount = classesDb.reduce((sum, c) => sum + c.sections.length, 0);
+    const sectionCount = classes.reduce((sum, c) => sum + c.sections.length, 0);
     return delay({
       sourceYear: source,
       targetYear: target,
-      classCount: classesDb.length,
+      classCount: classes.length,
       sectionCount,
       subjectCount: subjectsDb.length,
       timetableSlotCount: timetableDb.length,
     });
   },
 
-  executeRollover: (req: RolloverRequest): Promise<RolloverResult> => {
-    const sectionCount = classesDb.reduce((sum, c) => sum + c.sections.length, 0);
+  executeRollover: async (req: RolloverRequest): Promise<RolloverResult> => {
+    const classes = await academicApi.getClasses();
+    const sectionCount = classes.reduce((sum, c) => sum + c.sections.length, 0);
     // Mock: pretend we cloned everything requested
     return delay({
-      classesCloned: req.copyClasses ? classesDb.length : 0,
+      classesCloned: req.copyClasses ? classes.length : 0,
       sectionsCloned: req.copySections ? sectionCount : 0,
       subjectsCloned: req.copySubjects ? subjectsDb.length : 0,
       timetableSlotsCloned: req.copyTimetable ? timetableDb.length : 0,

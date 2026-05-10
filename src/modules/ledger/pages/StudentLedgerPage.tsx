@@ -3,9 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Download, ArrowUpRight, ArrowDownRight, Loader2, X, RotateCcw } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useLedgerStore } from '@/stores/ledger.store';
-import { useStudentsStore } from '@/stores/students.store';
+import { useDemoStudentsStore } from '@/stores/students.store';
 import { useUIStore } from '@/stores/ui.store';
-import type { Student } from '@/types/student.types';
+import type { DemoStudent } from '@/types/student.types';
 import type { LedgerEntry } from '@/types/ledger.types';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -17,10 +17,10 @@ export default function StudentLedgerPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
   const { entries, loading, fetchStudentLedger, postPayment, processRefund } = useLedgerStore();
-  const getStudent = useStudentsStore((s) => s.getStudent);
+  const getStudent = useDemoStudentsStore((s) => s.getStudent);
   const showToast = useUIStore((s) => s.showToast);
 
-  const [student, setStudent] = useState<Student | null>(null);
+  const [student, setStudent] = useState<DemoStudent | null>(null);
   const [studentError, setStudentError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [posting, setPosting] = useState(false);

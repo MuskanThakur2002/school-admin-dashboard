@@ -1,5 +1,5 @@
 import { schoolsApi } from '@/services/modules/schools.api';
-import { USE_MOCK_API } from '@/mocks/mock-mode';
+import { USE_MOCK_SCHOOLS } from '@/mocks/mock-mode';
 import { mockTenants } from '@/mocks/mock-tenants';
 import type { School } from '@/types/school.types';
 import type {
@@ -58,7 +58,7 @@ const defaultAccess: TenantAccessControl = {
   allowBulkImport: true,
 };
 
-function readBranding(raw: Record<string, unknown>): BrandingPayload {
+function readBranding(raw: Record<string, unknown> | null): BrandingPayload {
   return (raw ?? {}) as BrandingPayload;
 }
 
@@ -99,7 +99,7 @@ function schoolToTenant(school: School): Tenant {
 }
 
 function patchBranding(
-  current: Record<string, unknown>,
+  current: Record<string, unknown> | null,
   patch: Partial<BrandingPayload>,
   metaPatch?: Partial<UiMeta>,
 ): BrandingPayload {
@@ -126,13 +126,13 @@ function mockPatch(id: string, patch: Partial<Tenant>): Tenant {
 
 export const tenantApi = {
   getTenants: async (): Promise<Tenant[]> => {
-    if (USE_MOCK_API) return delay([...mockStore]);
+    if (USE_MOCK_SCHOOLS) return delay([...mockStore]);
     const res = await schoolsApi.list({ page: 1, limit: 100 });
     return res.data.map(schoolToTenant);
   },
 
   getTenant: async (id: string): Promise<Tenant> => {
-    if (USE_MOCK_API) {
+    if (USE_MOCK_SCHOOLS) {
       const t = mockStore.find((x) => x.id === id);
       if (!t) throw new Error('Tenant not found');
       return delay(t);
@@ -142,7 +142,7 @@ export const tenantApi = {
   },
 
   createTenant: async (dto: CreateTenantDto): Promise<Tenant> => {
-    if (USE_MOCK_API) {
+    if (USE_MOCK_SCHOOLS) {
       const t: Tenant = {
         id: `school-${Date.now()}`,
         name: dto.name,
@@ -191,7 +191,7 @@ export const tenantApi = {
   },
 
   updateBranding: async (id: string, dto: UpdateBrandingDto): Promise<Tenant> => {
-    if (USE_MOCK_API) return delay(mockPatch(id, { branding: { ...dto } }));
+    if (USE_MOCK_SCHOOLS) return delay(mockPatch(id, { branding: { ...dto } }));
     const current = await schoolsApi.getById(id);
     const nextBranding = patchBranding(current.branding, {
       primaryColor: dto.primaryColor,
@@ -203,7 +203,7 @@ export const tenantApi = {
   },
 
   updatePlan: async (id: string, dto: UpdatePlanDto): Promise<Tenant> => {
-    if (USE_MOCK_API) return delay(mockPatch(id, { plan: dto.plan }));
+    if (USE_MOCK_SCHOOLS) return delay(mockPatch(id, { plan: dto.plan }));
     const current = await schoolsApi.getById(id);
     const nextBranding = patchBranding(current.branding, {}, { plan: dto.plan });
     const updated = await schoolsApi.update(id, { branding: nextBranding as Record<string, unknown> });
@@ -211,7 +211,7 @@ export const tenantApi = {
   },
 
   updateAccess: async (id: string, dto: UpdateAccessDto): Promise<Tenant> => {
-    if (USE_MOCK_API) return delay(mockPatch(id, { access: { ...dto } }));
+    if (USE_MOCK_SCHOOLS) return delay(mockPatch(id, { access: { ...dto } }));
     const current = await schoolsApi.getById(id);
     const nextBranding = patchBranding(current.branding, {}, { access: { ...dto } });
     const updated = await schoolsApi.update(id, { branding: nextBranding as Record<string, unknown> });
@@ -219,7 +219,7 @@ export const tenantApi = {
   },
 
   suspendTenant: async (id: string): Promise<Tenant> => {
-    if (USE_MOCK_API) return delay(mockPatch(id, { status: 'suspended' }));
+    if (USE_MOCK_SCHOOLS) return delay(mockPatch(id, { status: 'suspended' }));
     const current = await schoolsApi.getById(id);
     const nextBranding = patchBranding(current.branding, {}, { status: 'suspended' });
     const updated = await schoolsApi.update(id, {
@@ -230,7 +230,7 @@ export const tenantApi = {
   },
 
   activateTenant: async (id: string): Promise<Tenant> => {
-    if (USE_MOCK_API) return delay(mockPatch(id, { status: 'active' }));
+    if (USE_MOCK_SCHOOLS) return delay(mockPatch(id, { status: 'active' }));
     const current = await schoolsApi.getById(id);
     const nextBranding = patchBranding(current.branding, {}, { status: 'active' });
     const updated = await schoolsApi.update(id, {
@@ -241,7 +241,7 @@ export const tenantApi = {
   },
 
   deleteTenant: async (id: string): Promise<void> => {
-    if (USE_MOCK_API) {
+    if (USE_MOCK_SCHOOLS) {
       const idx = mockStore.findIndex((t) => t.id === id);
       if (idx >= 0) mockStore.splice(idx, 1);
       await delay(null);

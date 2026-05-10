@@ -10,8 +10,9 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
-import { useStudentsStore } from '@/stores/students.store';
-import type { Student, ParentGuardian } from '@/types/student.types';
+import { useDemoStudentsStore } from '@/stores/students.store';
+import { useAcademicStore } from '@/stores/academic.store';
+import type { DemoStudent, ParentGuardian } from '@/types/student.types';
 import type { ApplicantDetails, ApplicantAddress } from '@/types/admissions.types';
 import {
   genderOptions, bloodGroupOptions, religionOptions,
@@ -49,7 +50,9 @@ const emptyParent = (relation: 'father' | 'mother' | 'guardian'): ParentGuardian
 export default function NewAdmissionPage() {
   const navigate = useNavigate();
   const createApplication = useAdmissionsStore((s) => s.createApplication);
-  const searchStudents = useStudentsStore((s) => s.searchStudents);
+  const academicYears = useAcademicStore((s) => s.years);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const searchStudents = useDemoStudentsStore((s) => s.searchStudents);
   const getStructureForClass = useFeeStore((s) => s.getStructureForClass);
   const classOptions = useClassOptions();
   const showToast = useUIStore((s) => s.showToast);
@@ -74,8 +77,8 @@ export default function NewAdmissionPage() {
 
   // Sibling search
   const [siblingQuery, setSiblingQuery] = useState('');
-  const [siblingResults, setSiblingResults] = useState<Student[]>([]);
-  const [selectedSiblings, setSelectedSiblings] = useState<Student[]>([]);
+  const [siblingResults, setSiblingResults] = useState<DemoStudent[]>([]);
+  const [selectedSiblings, setSelectedSiblings] = useState<DemoStudent[]>([]);
   const [searching, setSearching] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -88,6 +91,10 @@ export default function NewAdmissionPage() {
       setFeePreview(s ? { name: s.name, total: s.totalAmount } : null);
     });
   }, [classApplied, getStructureForClass]);
+
+  useEffect(() => {
+    if (academicYears.length === 0) fetchYears();
+  }, [academicYears.length, fetchYears]);
 
   useEffect(() => {
     if (!siblingQuery.trim()) {
@@ -160,7 +167,7 @@ export default function NewAdmissionPage() {
     setParents((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const addSibling = (s: Student) => {
+  const addSibling = (s: DemoStudent) => {
     setSelectedSiblings((prev) => [...prev, s]);
     setSiblingQuery('');
     setSiblingResults([]);
@@ -182,6 +189,12 @@ export default function NewAdmissionPage() {
       }
     }
 
+    const activeYear = academicYears.find((y) => y.isCurrent) ?? academicYears[0];
+    if (!activeYear) {
+      showToast({ type: 'error', title: 'No academic year', message: 'Set up an academic year before creating an application' });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const filledParents = parents.filter((p) => p.name.trim());
@@ -193,7 +206,7 @@ export default function NewAdmissionPage() {
         previousSchool: previousSchool || undefined,
         siblingIds: selectedSiblings.length > 0 ? selectedSiblings.map((s) => s.id) : undefined,
         remarks: remarks || undefined,
-      });
+      }, activeYear.id);
       showToast({
         type: 'success',
         title: 'Application submitted',

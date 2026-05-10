@@ -3,7 +3,7 @@
  * Posts debit or credit adjustments directly to student ledgers with full audit trail.
  */
 import { ledgerApi } from './ledger.api';
-import { studentsApi } from './students.api';
+import { demoStudentsApi } from './students.api';
 
 const D = 150;
 const delay = <T>(data: T): Promise<T> => new Promise((r) => setTimeout(() => r(data), D));
@@ -58,7 +58,7 @@ export const adjustmentApi = {
 
   postAdjustment: async (dto: PostAdjustmentDto): Promise<Adjustment> => {
     // Look up student
-    const student = await studentsApi.getStudent(dto.studentId);
+    const student = await demoStudentsApi.getStudent(dto.studentId);
     const today = new Date().toISOString().split('T')[0];
 
     // Post entry to ledger with 'adjustment' category

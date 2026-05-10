@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Phone, Mail, Search, X, MessageSquare, ArrowUpRight,
   Globe, UserPlus, Megaphone, Users, ArrowRight, Trash2, CheckCircle2,
-  UserPlus2,
+  UserPlus2, MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
@@ -12,24 +12,39 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
-import type { Enquiry, EnquirySource, EnquiryStatus } from '@/types/admissions.types';
+import { useAcademicStore } from '@/stores/academic.store';
+import type { Enquiry, EnquiryStatus } from '@/types/admissions.types';
+
+const genderOptions = [
+  { label: 'Male', value: 'male' },
+  { label: 'Female', value: 'female' },
+  { label: 'Other', value: 'other' },
+];
 
 const statusStyle: Record<EnquiryStatus, { dot: string; text: string; bg: string }> = {
   new: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
   contacted: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   converted: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-  closed: { dot: 'bg-slate-400', text: 'text-slate-500', bg: 'bg-slate-50' },
+  lost: { dot: 'bg-slate-400', text: 'text-slate-500', bg: 'bg-slate-50' },
 };
 
-const sourceIcon: Record<EnquirySource, React.ElementType> = {
-  walk_in: Users, online: Globe, referral: UserPlus, advertisement: Megaphone,
+const sourceIconFor = (source: string): React.ElementType => {
+  const key = source.toLowerCase();
+  if (key === 'walk-in' || key === 'walk_in') return Users;
+  if (key === 'online' || key === 'social media' || key === 'website') return Globe;
+  if (key === 'referral') return UserPlus;
+  if (key === 'advertisement' || key === 'ad') return Megaphone;
+  if (key === 'phone call' || key === 'phone') return Phone;
+  return MoreHorizontal;
 };
 
 const sourceOptions = [
-  { label: 'Walk-in', value: 'walk_in' },
-  { label: 'Online', value: 'online' },
-  { label: 'Referral', value: 'referral' },
-  { label: 'Advertisement', value: 'advertisement' },
+  { label: 'Walk-in', value: 'Walk-in' },
+  { label: 'Online', value: 'Online' },
+  { label: 'Referral', value: 'Referral' },
+  { label: 'Advertisement', value: 'Advertisement' },
+  { label: 'Phone Call', value: 'Phone Call' },
+  { label: 'Social Media', value: 'Social Media' },
 ];
 
 export default function EnquiryListPage() {
@@ -49,19 +64,40 @@ export default function EnquiryListPage() {
   const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // Convert-to-application modal state
+  const academicYears = useAcademicStore((s) => s.years);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertDob, setConvertDob] = useState('');
+  const [convertGender, setConvertGender] = useState<'male' | 'female' | 'other'>('male');
+  const [convertYearId, setConvertYearId] = useState('');
+  const [convertSubmitting, setConvertSubmitting] = useState(false);
+
   // Form state
   const [formStudent, setFormStudent] = useState('');
   const [formParent, setFormParent] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formClass, setFormClass] = useState('');
-  const [formSource, setFormSource] = useState<EnquirySource>('walk_in');
+  const [formSource, setFormSource] = useState<string>('Walk-in');
   const [formNotes, setFormNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (enquiries.length === 0) fetchEnquiries();
   }, [enquiries.length, fetchEnquiries]);
+
+  useEffect(() => {
+    if (academicYears.length === 0) fetchYears();
+  }, [academicYears.length, fetchYears]);
+
+  // Default the convert modal to the active year when opening
+  useEffect(() => {
+    if (convertOpen && !convertYearId && academicYears.length > 0) {
+      const active = academicYears.find((y) => y.isCurrent) ?? academicYears[0];
+      setConvertYearId(active.id);
+    }
+  }, [convertOpen, convertYearId, academicYears]);
 
   const newCount = enquiries.filter((e) => e.status === 'new').length;
   const contactedCount = enquiries.filter((e) => e.status === 'contacted').length;
@@ -76,7 +112,7 @@ export default function EnquiryListPage() {
 
   const resetForm = () => {
     setFormStudent(''); setFormParent(''); setFormPhone(''); setFormEmail('');
-    setFormClass(''); setFormSource('walk_in'); setFormNotes('');
+    setFormClass(''); setFormSource('Walk-in'); setFormNotes('');
   };
 
   const handleCreate = async () => {
@@ -109,13 +145,34 @@ export default function EnquiryListPage() {
     }
   };
 
-  const handleConvert = async (e: Enquiry) => {
+  const handleConvert = (e: Enquiry) => {
+    setSelectedEnquiry(e);
+    setConvertDob('');
+    setConvertGender('male');
+    setConvertYearId('');
+    setConvertOpen(true);
+  };
+
+  const handleConfirmConvert = async () => {
+    if (!selectedEnquiry) return;
+    if (!convertDob || !convertYearId) {
+      showToast({ type: 'error', title: 'Missing fields', message: 'Date of birth and academic year are required' });
+      return;
+    }
+    setConvertSubmitting(true);
     try {
-      const app = await convertEnquiry(e.id);
+      const app = await convertEnquiry(selectedEnquiry.id, {
+        dateOfBirth: convertDob,
+        gender: convertGender,
+        academicYearId: convertYearId,
+      });
       showToast({ type: 'success', title: 'Converted to application', message: `${app.applicationNo} created` });
+      setConvertOpen(false);
       setDetailOpen(false);
     } catch (err) {
       showToast({ type: 'error', title: 'Conversion failed', message: (err as Error).message });
+    } finally {
+      setConvertSubmitting(false);
     }
   };
 
@@ -189,7 +246,7 @@ export default function EnquiryListPage() {
           )}
         </div>
         <div className="flex gap-1.5">
-          {['', 'new', 'contacted', 'converted', 'closed'].map((s) => (
+          {['', 'new', 'contacted', 'converted', 'lost'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn('px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold transition-all',
                 statusFilter === s ? 'bg-[#0f172a] text-white shadow-sm' : 'text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)]')}>
@@ -217,7 +274,7 @@ export default function EnquiryListPage() {
           </div>
         ) : filtered.map((enquiry, idx) => {
           const st = statusStyle[enquiry.status];
-          const SourceIcon = sourceIcon[enquiry.source];
+          const SourceIcon = sourceIconFor(enquiry.source);
           return (
             <div
               key={enquiry.id}
@@ -250,7 +307,7 @@ export default function EnquiryListPage() {
 
               <div className="flex items-center gap-1.5">
                 <SourceIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" strokeWidth={1.8} />
-                <span className="text-[0.75rem] text-[var(--text-tertiary)] capitalize">{enquiry.source.replace('_', ' ')}</span>
+                <span className="text-[0.75rem] text-[var(--text-tertiary)]">{enquiry.source}</span>
               </div>
 
               <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', st.bg)}>
@@ -287,7 +344,7 @@ export default function EnquiryListPage() {
             <Input label="Phone *" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="e.g. 9812345678" />
             <Input label="Email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="e.g. parent@email.com" />
           </div>
-          <Select label="Source" options={sourceOptions} value={formSource} onChange={(e) => setFormSource(e.target.value as EnquirySource)} />
+          <Select label="Source" options={sourceOptions} value={formSource} onChange={(e) => setFormSource(e.target.value)} />
           <Input label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Any additional details..." />
         </div>
       </Modal>
@@ -313,7 +370,7 @@ export default function EnquiryListPage() {
                     <CheckCircle2 className="w-4 h-4" /> Mark Contacted
                   </Button>
                 )}
-                {selectedEnquiry.status !== 'converted' && selectedEnquiry.status !== 'closed' && (
+                {selectedEnquiry.status !== 'converted' && selectedEnquiry.status !== 'lost' && (
                   <Button onClick={() => handleConvert(selectedEnquiry)}>
                     <ArrowRight className="w-4 h-4" /> Convert to Application
                   </Button>
@@ -330,7 +387,7 @@ export default function EnquiryListPage() {
                 { label: 'Parent / Guardian', value: selectedEnquiry.parentName },
                 { label: 'Phone', value: selectedEnquiry.parentPhone },
                 { label: 'Email', value: selectedEnquiry.parentEmail || '—' },
-                { label: 'Source', value: selectedEnquiry.source.replace('_', ' ') },
+                { label: 'Source', value: selectedEnquiry.source || '—' },
               ].map((f) => (
                 <div key={f.label}>
                   <p className="text-[0.6875rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em] mb-1">{f.label}</p>
@@ -351,6 +408,49 @@ export default function EnquiryListPage() {
                 <span className={cn('text-[0.6875rem] font-semibold capitalize', statusStyle[selectedEnquiry.status].text)}>{selectedEnquiry.status}</span>
               </div>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Convert-to-Application Modal */}
+      {selectedEnquiry && (
+        <Modal
+          open={convertOpen}
+          onOpenChange={setConvertOpen}
+          title={`Convert: ${selectedEnquiry.studentName}`}
+          description="Add the missing details required to create an application"
+          size="sm"
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setConvertOpen(false)}>Cancel</Button>
+              <Button onClick={handleConfirmConvert} loading={convertSubmitting}>
+                <ArrowRight className="w-4 h-4" /> Create Application
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <Input
+              type="date"
+              label="Date of Birth *"
+              value={convertDob}
+              onChange={(e) => setConvertDob(e.target.value)}
+            />
+            <Select
+              label="Gender *"
+              options={genderOptions}
+              value={convertGender}
+              onChange={(e) => setConvertGender(e.target.value as 'male' | 'female' | 'other')}
+            />
+            <Select
+              label="Academic Year *"
+              options={academicYears.map((y) => ({ label: y.name, value: y.id }))}
+              value={convertYearId}
+              onChange={(e) => setConvertYearId(e.target.value)}
+            />
+            <p className="text-[0.6875rem] text-[var(--text-muted)] leading-relaxed">
+              Other details (parent contact, class) will be carried over from the enquiry.
+            </p>
           </div>
         </Modal>
       )}

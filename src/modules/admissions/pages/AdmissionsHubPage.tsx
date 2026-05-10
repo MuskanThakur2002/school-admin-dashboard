@@ -3,20 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import {
   UserPlus2, MessageSquare, FileCheck, CheckCircle2, ArrowRight,
   Clock, Phone, Globe, UserPlus, Megaphone, Users, AlertTriangle, XCircle,
+  MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAdmissionsStore } from '@/stores/admissions.store';
-import type { EnquirySource } from '@/types/admissions.types';
 
-const sourceIcon: Record<EnquirySource, React.ElementType> = {
-  walk_in: Users, online: Globe, referral: UserPlus, advertisement: Megaphone,
+const sourceIconFor = (source: string): React.ElementType => {
+  const key = source.toLowerCase();
+  if (key === 'walk-in' || key === 'walk_in') return Users;
+  if (key === 'online' || key === 'social media' || key === 'website') return Globe;
+  if (key === 'referral') return UserPlus;
+  if (key === 'advertisement' || key === 'ad') return Megaphone;
+  if (key === 'phone call' || key === 'phone') return Phone;
+  return MoreHorizontal;
 };
 
 const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
   new: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
   contacted: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   converted: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-  closed: { dot: 'bg-slate-400', text: 'text-slate-500', bg: 'bg-slate-50' },
+  lost: { dot: 'bg-slate-400', text: 'text-slate-500', bg: 'bg-slate-50' },
   submitted: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
   under_review: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   verified: { dot: 'bg-violet-500', text: 'text-violet-700', bg: 'bg-violet-50' },
@@ -202,7 +208,7 @@ export default function AdmissionsHubPage() {
               </div>
             ) : recentEnquiries.map((e, idx) => {
               const st = statusStyle[e.status];
-              const SourceIcon = sourceIcon[e.source];
+              const SourceIcon = sourceIconFor(e.source);
               return (
                 <div
                   key={e.id}
@@ -222,7 +228,7 @@ export default function AdmissionsHubPage() {
                     <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{e.studentName}</p>
                     <div className="flex items-center gap-2 text-[0.6875rem] text-[var(--text-muted)]">
                       <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{e.parentPhone}</span>
-                      <span className="flex items-center gap-1"><SourceIcon className="w-3 h-3" />{e.source.replace('_', ' ')}</span>
+                      <span className="flex items-center gap-1"><SourceIcon className="w-3 h-3" />{e.source}</span>
                     </div>
                   </div>
                   <span className="text-[0.6875rem] text-[var(--text-ghost)]">Class {e.classInterest}</span>

@@ -18,12 +18,11 @@
 import type {
   Enquiry,
   Application,
-  CreateEnquiryDto,
   ApproveApplicationDto,
   ApplicationDocument,
   NewAdmissionDto,
 } from '@/types/admissions.types';
-import { studentsApi } from './students.api';
+import { demoStudentsApi } from './students.api';
 import { feeApi } from './fee.api';
 import { ledgerApi } from './ledger.api';
 
@@ -49,17 +48,6 @@ const verifyDocs = (count: number): ApplicationDocument[] =>
     status: i < count ? 'verified' : 'pending',
     uploadedAt: i < count ? '2026-04-05' : '',
   }));
-
-let enquiriesDb: Enquiry[] = [
-  { id: '1', studentName: 'Aarav Mehta', parentName: 'Deepak Mehta', parentPhone: '9812345001', parentEmail: 'deepak.m@email.com', classInterest: 'V', source: 'online', status: 'new', date: '2026-04-08', notes: 'Interested in CBSE curriculum' },
-  { id: '2', studentName: 'Diya Kapoor', parentName: 'Neha Kapoor', parentPhone: '9812345002', parentEmail: 'neha.k@email.com', classInterest: 'I', source: 'walk_in', status: 'contacted', date: '2026-04-06', notes: 'Campus tour done' },
-  { id: '3', studentName: 'Vihaan Rao', parentName: 'Sanjay Rao', parentPhone: '9812345003', parentEmail: 'sanjay.r@email.com', classInterest: 'VIII', source: 'referral', status: 'converted', date: '2026-03-28', notes: 'Referred by Mr. Patel' },
-  { id: '4', studentName: 'Saanvi Das', parentName: 'Amit Das', parentPhone: '9812345004', parentEmail: 'amit.d@email.com', classInterest: 'III', source: 'advertisement', status: 'new', date: '2026-04-09', notes: 'Saw newspaper ad' },
-  { id: '5', studentName: 'Reyansh Jain', parentName: 'Priya Jain', parentPhone: '9812345005', parentEmail: 'priya.j@email.com', classInterest: 'X', source: 'online', status: 'closed', date: '2026-03-15', notes: 'Chose different school' },
-  { id: '6', studentName: 'Anika Bose', parentName: 'Rahul Bose', parentPhone: '9812345006', parentEmail: 'rahul.b@email.com', classInterest: 'VI', source: 'walk_in', status: 'contacted', date: '2026-04-05', notes: 'Follow up next week' },
-  { id: '7', studentName: 'Aryan Tiwari', parentName: 'Pooja Tiwari', parentPhone: '9812345007', parentEmail: 'pooja.t@email.com', classInterest: 'II', source: 'referral', status: 'new', date: '2026-04-10', notes: 'Sibling already enrolled' },
-  { id: '8', studentName: 'Zara Sheikh', parentName: 'Imran Sheikh', parentPhone: '9812345008', parentEmail: 'imran.s@email.com', classInterest: 'IV', source: 'online', status: 'new', date: '2026-04-11', notes: 'Relocating from Pune' },
-];
 
 let applicationsDb: Application[] = [
   { id: 'a1', applicationNo: 'APP-2026-001', studentName: 'Aarav Mehta', parentName: 'Deepak Mehta', parentPhone: '9812345001', parentEmail: 'deepak.m@email.com', classApplied: 'V', appliedDate: '2026-04-08', status: 'submitted', documents: verifyDocs(0), documentsCount: 6, documentsVerified: 0 },
@@ -98,43 +86,11 @@ const nextAdmissionNo = () => {
 // ═════════════════════════════════════════════════════════════════
 
 export const admissionsApi = {
-  // ─── Enquiries ──────────────────────────────────────────────────
-  getEnquiries: (): Promise<Enquiry[]> => delay([...enquiriesDb]),
-
-  createEnquiry: (dto: CreateEnquiryDto): Promise<Enquiry> => {
-    const enquiry: Enquiry = {
-      id: crypto.randomUUID(),
-      studentName: dto.studentName,
-      parentName: dto.parentName,
-      parentPhone: dto.parentPhone,
-      parentEmail: dto.parentEmail || '',
-      classInterest: dto.classInterest,
-      source: dto.source || 'walk_in',
-      status: 'new',
-      date: new Date().toISOString().split('T')[0],
-      notes: dto.notes || '',
-    };
-    enquiriesDb = [enquiry, ...enquiriesDb];
-    return delay(enquiry);
-  },
-
-  updateEnquiryStatus: (id: string, status: Enquiry['status']): Promise<Enquiry> => {
-    const idx = enquiriesDb.findIndex((e) => e.id === id);
-    if (idx === -1) return Promise.reject(new Error('Enquiry not found'));
-    enquiriesDb[idx] = { ...enquiriesDb[idx], status };
-    return delay(enquiriesDb[idx]);
-  },
-
-  deleteEnquiry: (id: string): Promise<void> => {
-    enquiriesDb = enquiriesDb.filter((e) => e.id !== id);
-    return delay(undefined);
-  },
-
-  /** Convert an enquiry into a submitted application. */
-  convertEnquiryToApplication: (enquiryId: string): Promise<Application> => {
-    const enquiry = enquiriesDb.find((e) => e.id === enquiryId);
-    if (!enquiry) return Promise.reject(new Error('Enquiry not found'));
-
+  /**
+   * Create a submitted application from an enquiry's captured data.
+   * Status flip on the enquiry side is handled by the caller (enquiriesApi).
+   */
+  createApplicationFromEnquiry: (enquiry: Enquiry): Promise<Application> => {
     const application: Application = {
       id: crypto.randomUUID(),
       applicationNo: nextApplicationNo(),
@@ -151,11 +107,6 @@ export const admissionsApi = {
       documentsVerified: 0,
     };
     applicationsDb = [application, ...applicationsDb];
-
-    // Mark enquiry as converted
-    const idx = enquiriesDb.findIndex((e) => e.id === enquiryId);
-    if (idx !== -1) enquiriesDb[idx] = { ...enquiriesDb[idx], status: 'converted' };
-
     return delay(application);
   },
 
@@ -234,7 +185,7 @@ export const admissionsApi = {
    * On approval we:
    *   1. Generate unique admission number
    *   2. Assign class/section
-   *   3. Create a Student record via studentsApi (full demographics)
+   *   3. Create a Student record via demoStudentsApi (full demographics)
    *   4. (Backend-only) initialize ledger with fee plan
    *
    * Returns the updated application with createdStudentId populated.
@@ -252,7 +203,7 @@ export const admissionsApi = {
     const [firstName, ...rest] = app.studentName.split(' ');
     const lastName = rest.join(' ');
 
-    const student = await studentsApi.createFromApplication({
+    const student = await demoStudentsApi.createFromApplication({
       admissionNo,
       firstName: app.applicant?.firstName || firstName || 'Unknown',
       lastName: app.applicant?.lastName || lastName || '',

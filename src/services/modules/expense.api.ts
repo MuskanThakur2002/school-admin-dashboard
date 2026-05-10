@@ -3,7 +3,7 @@
  * Posts charges (books, uniform, fine, etc.) as debit entries to student ledgers.
  */
 import { ledgerApi } from './ledger.api';
-import { studentsApi } from './students.api';
+import { demoStudentsApi } from './students.api';
 import type { LedgerEntry } from '@/types/ledger.types';
 
 const D = 150;
@@ -54,7 +54,7 @@ export const expenseApi = {
 
   postExpense: async (dto: PostExpenseDto): Promise<Expense> => {
     // Look up student
-    const student = await studentsApi.getStudent(dto.studentId);
+    const student = await demoStudentsApi.getStudent(dto.studentId);
     const today = new Date().toISOString().split('T')[0];
 
     // Post debit entry to ledger

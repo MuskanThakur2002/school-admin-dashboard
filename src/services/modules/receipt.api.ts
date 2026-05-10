@@ -13,7 +13,7 @@ import type {
   SettlementNote,
 } from '@/types/receipt.types';
 import { ledgerApi } from './ledger.api';
-import { studentsApi } from './students.api';
+import { demoStudentsApi } from './students.api';
 
 const D = 150;
 const delay = <T>(data: T): Promise<T> => new Promise((r) => setTimeout(() => r(data), D));
@@ -57,7 +57,7 @@ export const receiptApi = {
    * Post a payment: creates a confirmed Receipt AND a credit entry in the ledger.
    */
   postPayment: async (dto: PostPaymentDto): Promise<Receipt> => {
-    const student = await studentsApi.getStudent(dto.studentId);
+    const student = await demoStudentsApi.getStudent(dto.studentId);
     const today = new Date().toISOString().split('T')[0];
     const receiptNo = nextReceiptNo();
 

@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useExpenseStore } from '@/stores/expense.store';
-import { useStudentsStore } from '@/stores/students.store';
+import { useDemoStudentsStore } from '@/stores/students.store';
 import type { ExpenseCategory } from '@/services/modules/expense.api';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -38,8 +38,8 @@ export default function ExpensePostingPage() {
   const loading = useExpenseStore((s) => s.loading);
   const fetchExpenses = useExpenseStore((s) => s.fetchExpenses);
   const postExpense = useExpenseStore((s) => s.postExpense);
-  const students = useStudentsStore((s) => s.students);
-  const fetchStudents = useStudentsStore((s) => s.fetchStudents);
+  const students = useDemoStudentsStore((s) => s.students);
+  const fetchStudents = useDemoStudentsStore((s) => s.fetchStudents);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');

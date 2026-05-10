@@ -1,30 +1,37 @@
-export type TeacherStatus = 'active' | 'inactive' | 'on_leave';
-
-export interface ClassAssignment {
-  classShortName: string;
-  sections: string[];
+export interface TeacherUser {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string | null;
 }
 
 export interface Teacher {
   id: string;
+  schoolId: string;
+  userId: string;
   employeeId: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  dateOfBirth: string;
-  gender: 'male' | 'female' | 'other';
-  qualification: string;
-  specialization?: string;
-  joiningDate: string;
-  subjects: string[];
-  classAssignments: ClassAssignment[];
-  status: TeacherStatus;
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
-  avatar?: string;
-  emergencyContact?: string;
-  bloodGroup?: string;
+  hireDate: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: TeacherUser;
+}
+
+export interface CreateTeacherDto {
+  userId: string;
+  employeeId: string;
+  hireDate: string;
+}
+
+export type UpdateTeacherDto = Partial<CreateTeacherDto>;
+
+export interface TeacherListParams {
+  page?: number;
+  limit?: number;
+}
+
+export interface TeacherListResponse {
+  data: Teacher[];
+  total: number;
+  page: number;
+  limit: number;
 }

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useReceiptStore } from '@/stores/receipt.store';
 import { useLedgerStore } from '@/stores/ledger.store';
-import { useStudentsStore } from '@/stores/students.store';
+import { useDemoStudentsStore } from '@/stores/students.store';
 import type { PaymentMode } from '@/types/receipt.types';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -43,7 +43,7 @@ export default function PaymentPostingPage() {
   const showToast = useUIStore((s) => s.showToast);
   const postPayment = useReceiptStore((s) => s.postPayment);
   const { summaries, fetchSummaries } = useLedgerStore();
-  const { students, fetchStudents } = useStudentsStore();
+  const { students, fetchStudents } = useDemoStudentsStore();
 
   useEffect(() => { fetchStudents(); fetchSummaries(); }, [fetchStudents, fetchSummaries]);
 

@@ -9,8 +9,8 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAcademicStore } from '@/stores/academic.store';
-import { useStudentsStore } from '@/stores/students.store';
-import type { Student } from '@/types/student.types';
+import { useDemoStudentsStore } from '@/stores/students.store';
+import type { DemoStudent } from '@/types/student.types';
 import type { PromotionAction } from '@/services/modules/students.api';
 
 // ─── Action config ─────────────────────────────────────────
@@ -72,7 +72,7 @@ const actionOptions = [
 // ─── Per-student decision state ────────────────────────────
 
 interface StudentDecision {
-  student: Student;
+  student: DemoStudent;
   action: PromotionAction;
   targetClass: string;
   targetSection: string;
@@ -85,9 +85,9 @@ export default function PromotionPage() {
   const navigate = useNavigate();
   const classes = useAcademicStore((s) => s.classes);
   const fetchClasses = useAcademicStore((s) => s.fetchClasses);
-  const students = useStudentsStore((s) => s.students);
-  const fetchStudents = useStudentsStore((s) => s.fetchStudents);
-  const bulkPromote = useStudentsStore((s) => s.bulkPromote);
+  const students = useDemoStudentsStore((s) => s.students);
+  const fetchStudents = useDemoStudentsStore((s) => s.fetchStudents);
+  const bulkPromote = useDemoStudentsStore((s) => s.bulkPromote);
   const showToast = useUIStore((s) => s.showToast);
 
   const [sourceClassId, setSourceClassId] = useState('');

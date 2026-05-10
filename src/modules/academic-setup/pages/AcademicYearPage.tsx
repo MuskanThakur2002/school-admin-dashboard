@@ -28,6 +28,7 @@ export default function AcademicYearPage() {
   const [formName, setFormName] = useState('');
   const [formStart, setFormStart] = useState('');
   const [formEnd, setFormEnd] = useState('');
+  const [formIsCurrent, setFormIsCurrent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -41,10 +42,10 @@ export default function AcademicYearPage() {
     }
     setSubmitting(true);
     try {
-      await createYear({ name: formName, startDate: formStart, endDate: formEnd });
+      await createYear({ name: formName, startDate: formStart, endDate: formEnd, isCurrent: formIsCurrent });
       showToast({ type: 'success', title: 'Academic year created', message: formName });
       setModalOpen(false);
-      setFormName(''); setFormStart(''); setFormEnd('');
+      setFormName(''); setFormStart(''); setFormEnd(''); setFormIsCurrent(false);
     } catch (err) {
       showToast({ type: 'error', title: 'Failed', message: (err as Error).message });
     } finally {
@@ -174,6 +175,15 @@ export default function AcademicYearPage() {
           <Input label="Year Name *" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. 2027-28" />
           <Input label="Start Date *" type="date" value={formStart} onChange={(e) => setFormStart(e.target.value)} />
           <Input label="End Date *" type="date" value={formEnd} onChange={(e) => setFormEnd(e.target.value)} />
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formIsCurrent}
+              onChange={(e) => setFormIsCurrent(e.target.checked)}
+              className="w-4 h-4 rounded accent-[#002c98]"
+            />
+            <span className="text-[0.8125rem] text-[var(--text-secondary)]">Set as current academic year</span>
+          </label>
         </div>
       </Modal>
     </div>

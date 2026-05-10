@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdjustmentStore } from '@/stores/adjustment.store';
-import { useStudentsStore } from '@/stores/students.store';
+import { useDemoStudentsStore } from '@/stores/students.store';
 import type { AdjustmentReason } from '@/services/modules/adjustment.api';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -38,8 +38,8 @@ export default function ManualAdjustmentPage() {
   const loading = useAdjustmentStore((s) => s.loading);
   const fetchAdjustments = useAdjustmentStore((s) => s.fetchAdjustments);
   const postAdjustment = useAdjustmentStore((s) => s.postAdjustment);
-  const students = useStudentsStore((s) => s.students);
-  const fetchStudents = useStudentsStore((s) => s.fetchStudents);
+  const students = useDemoStudentsStore((s) => s.students);
+  const fetchStudents = useDemoStudentsStore((s) => s.fetchStudents);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');

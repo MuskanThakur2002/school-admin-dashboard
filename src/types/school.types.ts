@@ -10,7 +10,7 @@ export interface School {
   location: SchoolLocation;
   phoneNumber: string;
   domain: string;
-  branding: Record<string, unknown>;
+  branding: Record<string, unknown> | null;
   isActive: boolean;
   initialPayment: number;
   monthlyPayment: number;
