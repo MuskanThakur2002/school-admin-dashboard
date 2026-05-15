@@ -79,22 +79,21 @@ export interface CreateClassDto {
 export type UpdateClassDto = Partial<CreateClassDto>;
 
 // ─── Subject ───────────────────────────────────────────────
-export type SubjectType = 'core' | 'elective' | 'activity';
-
 export interface Subject {
   id: string;
+  schoolId?: string;
   name: string;
   code: string;
-  type: SubjectType;
-  classes: string[]; // class shortNames (V, VIII, etc.)
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateSubjectDto {
   name: string;
   code: string;
-  type: SubjectType;
-  classes: string[];
 }
+
+export type UpdateSubjectDto = Partial<CreateSubjectDto>;
 
 // ─── Timetable ─────────────────────────────────────────────
 export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
@@ -118,6 +117,7 @@ export interface CreateTimetableSlotDto {
   day: DayOfWeek;
   period: number;
   subjectId: string;
+  subjectName: string;
   teacher: string;
 }
 

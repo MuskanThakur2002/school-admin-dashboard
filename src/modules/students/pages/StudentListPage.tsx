@@ -6,6 +6,8 @@ import {
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
 import { useParentStore } from '@/stores/parent.store';
+import { useEnrollmentStore } from '@/stores/enrollment.store';
+import { useAcademicStore } from '@/stores/academic.store';
 import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -36,6 +38,12 @@ export default function StudentListPage() {
   const loading = useStudentsStore((s) => s.loading);
   const fetchStudents = useStudentsStore((s) => s.fetchStudents);
   const deleteStudent = useStudentsStore((s) => s.deleteStudent);
+  const enrollments = useEnrollmentStore((s) => s.enrollments);
+  const fetchEnrollments = useEnrollmentStore((s) => s.fetchEnrollments);
+  const years = useAcademicStore((s) => s.years);
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
@@ -45,6 +53,36 @@ export default function StudentListPage() {
   useEffect(() => {
     fetchStudents(1, 50);
   }, [fetchStudents]);
+
+  // Load academic context once; needed to resolve class names for each
+  // student's enrollment.
+  useEffect(() => {
+    if (years.length === 0) fetchYears();
+    if (classes.length === 0) fetchClasses();
+  }, [years.length, classes.length, fetchYears, fetchClasses]);
+
+  const activeYear = useMemo(() => years.find((y) => y.isCurrent) ?? years[0] ?? null, [years]);
+
+  // One extra call: fetch ALL enrollments for the active year, then join
+  // in-memory below. Keeps the student-list to a constant 2 API calls.
+  useEffect(() => {
+    if (activeYear?.id) {
+      fetchEnrollments({ academicYearId: activeYear.id, limit: 500 });
+    }
+  }, [activeYear?.id, fetchEnrollments]);
+
+  // studentId → "Class – Section" string (most recent enrollment in current year).
+  const enrollmentByStudent = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of enrollments) {
+      const className = classes.find((c) => c.id === e.classSection?.classMasterId)?.name ?? '—';
+      const label = `${className} – ${e.classSection?.section ?? '—'}`;
+      // First-write-wins: enrollments come back newest first; if duplicates,
+      // keep the most recent one.
+      if (!map.has(e.studentId)) map.set(e.studentId, label);
+    }
+    return map;
+  }, [enrollments, classes]);
 
   const activeCount = useMemo(
     () => students.filter((s) => s.status?.toLowerCase() === 'active').length,
@@ -155,8 +193,8 @@ export default function StudentListPage() {
       </div>
 
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr_1fr_0.4fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Adm. No.', 'Student', 'DOB', 'Gender', 'Status', ''].map((h) => (
+        <div className="grid grid-cols-[1.2fr_2.2fr_1.3fr_0.9fr_0.9fr_1fr_0.4fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          {['Adm. No.', 'Student', 'Class', 'DOB', 'Gender', 'Status', ''].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
@@ -180,7 +218,7 @@ export default function StudentListPage() {
               key={student.id}
               onClick={() => navigate(`/students/${student.id}`)}
               className={cn(
-                'grid grid-cols-[1.2fr_2.5fr_1fr_1fr_1fr_0.4fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
+                'grid grid-cols-[1.2fr_2.2fr_1.3fr_0.9fr_0.9fr_1fr_0.4fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
                 idx < filteredData.length - 1 && 'border-b border-[var(--border-subtle)]',
               )}
             >
@@ -192,6 +230,12 @@ export default function StudentListPage() {
                 </div>
                 <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{student.name}</p>
               </div>
+
+              <span className="text-[0.75rem] text-[var(--text-secondary)] truncate">
+                {enrollmentByStudent.get(student.id) ?? (
+                  <span className="text-[var(--text-ghost)] italic">Not enrolled</span>
+                )}
+              </span>
 
               <span className="text-[0.8125rem] text-[var(--text-secondary)]">{student.dateOfBirth || '—'}</span>
 
@@ -242,6 +286,11 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
   const createStudent = useStudentsStore((s) => s.createStudent);
   const parents = useParentStore((s) => s.parents);
   const fetchParents = useParentStore((s) => s.fetchParents);
+  const createEnrollment = useEnrollmentStore((s) => s.createEnrollment);
+  const years = useAcademicStore((s) => s.years);
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
   const showToast = useUIStore((s) => s.showToast);
 
   const [form, setForm] = useState({
@@ -251,15 +300,25 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     gender: 'Male' as StudentGender,
     parentId: '',
     status: 'active',
+    // Optional enrollment — empty means "don't enroll now"
+    classSectionId: '',
+    rollNumber: '',
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open && parents.length === 0) fetchParents(1, 100);
-  }, [open, parents.length, fetchParents]);
+    if (!open) return;
+    if (parents.length === 0) fetchParents(1, 100);
+    if (years.length === 0) fetchYears();
+    if (classes.length === 0) fetchClasses();
+  }, [open, parents.length, years.length, classes.length, fetchParents, fetchYears, fetchClasses]);
 
   const reset = () =>
-    setForm({ name: '', admissionNumber: '', dateOfBirth: '', gender: 'Male', parentId: '', status: 'active' });
+    setForm({
+      name: '', admissionNumber: '', dateOfBirth: '',
+      gender: 'Male', parentId: '', status: 'active',
+      classSectionId: '', rollNumber: '',
+    });
 
   const handleClose = (next: boolean) => {
     if (!next) reset();
@@ -276,6 +335,8 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     form.parentId &&
     form.status.trim();
 
+  const activeYear = useMemo(() => years.find((y) => y.isCurrent) ?? years[0] ?? null, [years]);
+
   const handleSubmit = async () => {
     if (!canSubmit || saving) return;
     setSaving(true);
@@ -288,8 +349,33 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
         parentId: form.parentId,
         status: form.status.trim(),
       };
-      await createStudent(dto);
+      const student = await createStudent(dto);
       showToast({ type: 'success', title: 'Student added', message: form.name.trim() });
+
+      // Step 2: optional enrollment. If the user picked a class-section and
+      // we know the active year, enroll. A failure here doesn't undo the
+      // student — surface as a separate toast so the admin can retry from
+      // the profile page.
+      if (form.classSectionId && activeYear?.id) {
+        try {
+          await createEnrollment({
+            studentId: student.id,
+            classSectionId: form.classSectionId,
+            academicYearId: activeYear.id,
+            rollNumber: form.rollNumber.trim() ? Number(form.rollNumber) : 0,
+            status: 'active',
+            joinedAt: new Date().toISOString(),
+          });
+          showToast({ type: 'success', title: 'Enrolled', message: 'Class assigned successfully' });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Enrollment failed';
+          showToast({
+            type: 'error',
+            title: 'Student created, but enrollment failed',
+            message: `${message} — enroll manually from the student profile.`,
+          });
+        }
+      }
       handleClose(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
@@ -303,6 +389,16 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     label: p.user?.name ? `${p.user.name}${p.user.email ? ` — ${p.user.email}` : ''}` : p.id,
     value: p.id,
   }));
+
+  const sectionOptions = useMemo(() => {
+    const opts: { label: string; value: string }[] = [{ label: '— Skip enrollment for now —', value: '' }];
+    for (const cls of classes) {
+      for (const s of cls.sections) {
+        opts.push({ label: `${cls.name} – ${s.name}`, value: s.id });
+      }
+    }
+    return opts;
+  }, [classes]);
 
   return (
     <Modal
@@ -359,6 +455,31 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
             onChange={(e) => update('status', e.target.value)}
             placeholder="active"
           />
+        </div>
+
+        <div className="border-t border-[var(--border-subtle)] pt-4">
+          <h3 className="text-[0.8125rem] font-bold text-[var(--text-primary)] mb-1">Enrollment <span className="font-medium text-[var(--text-muted)]">(optional)</span></h3>
+          <p className="text-[0.6875rem] text-[var(--text-muted)] mb-3">
+            Assign a class-section now, or skip and enroll later from the profile.
+            {activeYear ? ` Year: ${activeYear.name}.` : ' (Loading academic year…)'}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="Class & Section"
+              value={form.classSectionId}
+              onChange={(e) => update('classSectionId', e.target.value)}
+              options={sectionOptions}
+            />
+            <Input
+              label="Roll number"
+              type="number"
+              min={0}
+              value={form.rollNumber}
+              onChange={(e) => update('rollNumber', e.target.value)}
+              placeholder="e.g., 12"
+              disabled={!form.classSectionId}
+            />
+          </div>
         </div>
       </div>
     </Modal>

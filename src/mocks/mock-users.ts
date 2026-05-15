@@ -16,6 +16,8 @@ const allPermissions = [
   'students.write',
   'teachers.read',
   'teachers.write',
+  'attendance.read',
+  'attendance.write',
   'parents.read',
   'parents.write',
   'fees.read',

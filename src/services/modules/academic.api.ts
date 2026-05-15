@@ -1,7 +1,8 @@
 /**
  * Academic Setup API Layer
- * Academic Years, Classes (class-masters), and Sections (class-sections) use
- * the real backend. Subjects, timetable, houses, and rollover are still mocked.
+ * Academic Years, Classes (class-masters), Sections (class-sections), and
+ * Subjects use the real backend. Timetable, houses, and rollover are still
+ * mocked.
  */
 import { api } from '@/services/api-client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -9,7 +10,7 @@ import type {
   AcademicYear, ClassGroup, Section, Subject, TimetableSlot,
   CreateAcademicYearDto, UpdateAcademicYearDto,
   CreateClassDto, UpdateClassDto, CreateSectionDto, UpdateSectionDto,
-  CreateSubjectDto, CreateTimetableSlotDto, DayOfWeek,
+  CreateSubjectDto, UpdateSubjectDto, CreateTimetableSlotDto, DayOfWeek,
   House, CreateHouseDto, AssignHouseDto,
   RolloverPreview, RolloverRequest, RolloverResult,
 } from '@/types/academic.types';
@@ -111,6 +112,27 @@ function mapSection(b: BackendClassSection): Section {
   };
 }
 
+// ─── Subject backend wire format & mapper ─────────────────
+interface BackendSubject {
+  id: string;
+  schoolId: string;
+  name: string;
+  code: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+function mapSubject(b: BackendSubject): Subject {
+  return {
+    id: b.id,
+    schoolId: b.schoolId,
+    name: b.name,
+    code: b.code,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
 function mapClass(b: BackendClassMaster, sections: Section[] = []): ClassGroup {
   return {
     id: b.id,
@@ -127,22 +149,6 @@ function mapClass(b: BackendClassMaster, sections: Section[] = []): ClassGroup {
 }
 
 // ─── Mock DBs ──────────────────────────────────────────────
-
-let subjectsDb: Subject[] = [
-  { id: 'sub1', name: 'English', code: 'ENG', type: 'core', classes: ['I', 'II', 'V', 'VIII', 'X', 'XII'] },
-  { id: 'sub2', name: 'Hindi', code: 'HIN', type: 'core', classes: ['I', 'II', 'V', 'VIII', 'X'] },
-  { id: 'sub3', name: 'Mathematics', code: 'MAT', type: 'core', classes: ['I', 'II', 'V', 'VIII', 'X', 'XII'] },
-  { id: 'sub4', name: 'Science', code: 'SCI', type: 'core', classes: ['V', 'VIII'] },
-  { id: 'sub5', name: 'Physics', code: 'PHY', type: 'core', classes: ['X', 'XII'] },
-  { id: 'sub6', name: 'Chemistry', code: 'CHE', type: 'core', classes: ['X', 'XII'] },
-  { id: 'sub7', name: 'Biology', code: 'BIO', type: 'elective', classes: ['X', 'XII'] },
-  { id: 'sub8', name: 'Social Studies', code: 'SST', type: 'core', classes: ['V', 'VIII', 'X'] },
-  { id: 'sub9', name: 'Computer Science', code: 'CS', type: 'elective', classes: ['VIII', 'X', 'XII'] },
-  { id: 'sub10', name: 'Physical Education', code: 'PE', type: 'activity', classes: ['I', 'II', 'V', 'VIII', 'X', 'XII'] },
-  { id: 'sub11', name: 'Art & Craft', code: 'ART', type: 'activity', classes: ['I', 'II', 'V'] },
-  { id: 'sub12', name: 'Music', code: 'MUS', type: 'activity', classes: ['I', 'II', 'V', 'VIII'] },
-];
-
 // Seed timetable for Class V Section A
 const periodTimes = [
   { period: 1, start: '09:00', end: '09:45' },
@@ -350,21 +356,50 @@ export const academicApi = {
   },
 
   // ─── Subjects ───────────────────────────────────────────
-  getSubjects: (): Promise<Subject[]> => delay([...subjectsDb]),
-
-  createSubject: (dto: CreateSubjectDto): Promise<Subject> => {
-    const sub: Subject = {
-      id: crypto.randomUUID(),
-      name: dto.name, code: dto.code.toUpperCase(),
-      type: dto.type, classes: dto.classes,
-    };
-    subjectsDb = [...subjectsDb, sub];
-    return delay(sub);
+  /** GET /schools/:schoolId/subjects */
+  getSubjects: async (): Promise<Subject[]> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<PaginatedEnvelope<BackendSubject>>(
+      `/schools/${schoolId}/subjects?page=1&limit=100`,
+    );
+    return (res.data ?? []).map(mapSubject);
   },
 
-  deleteSubject: (id: string): Promise<void> => {
-    subjectsDb = subjectsDb.filter((s) => s.id !== id);
-    return delay(undefined);
+  /** GET /schools/:schoolId/subjects/:id */
+  getSubject: async (id: string): Promise<Subject> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<ApiEnvelope<BackendSubject>>(
+      `/schools/${schoolId}/subjects/${id}`,
+    );
+    return mapSubject(res.data);
+  },
+
+  /** POST /schools/:schoolId/subjects */
+  createSubject: async (dto: CreateSubjectDto): Promise<Subject> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<ApiEnvelope<BackendSubject>>(
+      `/schools/${schoolId}/subjects`,
+      { name: dto.name, code: dto.code },
+    );
+    return mapSubject(res.data);
+  },
+
+  /** PUT /schools/:schoolId/subjects/:id */
+  updateSubject: async (id: string, dto: UpdateSubjectDto): Promise<Subject> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.put<ApiEnvelope<BackendSubject>>(
+      `/schools/${schoolId}/subjects/${id}`,
+      dto,
+    );
+    return mapSubject(res.data);
+  },
+
+  /** DELETE /schools/:schoolId/subjects/:id */
+  deleteSubject: async (id: string): Promise<void> => {
+    const schoolId = resolveSchoolId();
+    await api.delete<ApiEnvelope<unknown>>(
+      `/schools/${schoolId}/subjects/${id}`,
+    );
   },
 
   // ─── Timetable ──────────────────────────────────────────
@@ -373,9 +408,6 @@ export const academicApi = {
   },
 
   setTimetableSlot: (dto: CreateTimetableSlotDto): Promise<TimetableSlot> => {
-    const sub = subjectsDb.find((s) => s.id === dto.subjectId);
-    if (!sub) return Promise.reject(new Error('Subject not found'));
-
     const period = periodTimes.find((p) => p.period === dto.period);
     if (!period) return Promise.reject(new Error('Invalid period'));
 
@@ -387,7 +419,7 @@ export const academicApi = {
     const slot: TimetableSlot = {
       id: `slot-${dto.classId}-${dto.sectionId}-${dto.day}-${dto.period}`,
       classId: dto.classId, sectionId: dto.sectionId, day: dto.day, period: dto.period,
-      subjectId: sub.id, subjectName: sub.name, teacher: dto.teacher,
+      subjectId: dto.subjectId, subjectName: dto.subjectName, teacher: dto.teacher,
       startTime: period.start, endTime: period.end,
     };
     timetableDb = [...timetableDb, slot];
@@ -430,10 +462,14 @@ export const academicApi = {
   },
 
   // ─── Rollover ───────────────────────────────────────────
-  // Subjects / timetable counts are still mocked. Class & section counts now
-  // come from the real backend via getClasses().
+  // Timetable counts are still mocked. Class, section & subject counts now
+  // come from the real backend.
   getRolloverPreview: async (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
-    const [years, classes] = await Promise.all([academicApi.getYears(), academicApi.getClasses()]);
+    const [years, classes, subjects] = await Promise.all([
+      academicApi.getYears(),
+      academicApi.getClasses(),
+      academicApi.getSubjects(),
+    ]);
     const source = years.find((y) => y.id === sourceYearId);
     const target = years.find((y) => y.id === targetYearId);
     if (!source || !target) throw new Error('Year not found');
@@ -444,19 +480,22 @@ export const academicApi = {
       targetYear: target,
       classCount: classes.length,
       sectionCount,
-      subjectCount: subjectsDb.length,
+      subjectCount: subjects.length,
       timetableSlotCount: timetableDb.length,
     });
   },
 
   executeRollover: async (req: RolloverRequest): Promise<RolloverResult> => {
-    const classes = await academicApi.getClasses();
+    const [classes, subjects] = await Promise.all([
+      academicApi.getClasses(),
+      academicApi.getSubjects(),
+    ]);
     const sectionCount = classes.reduce((sum, c) => sum + c.sections.length, 0);
     // Mock: pretend we cloned everything requested
     return delay({
       classesCloned: req.copyClasses ? classes.length : 0,
       sectionsCloned: req.copySections ? sectionCount : 0,
-      subjectsCloned: req.copySubjects ? subjectsDb.length : 0,
+      subjectsCloned: req.copySubjects ? subjects.length : 0,
       timetableSlotsCloned: req.copyTimetable ? timetableDb.length : 0,
     });
   },

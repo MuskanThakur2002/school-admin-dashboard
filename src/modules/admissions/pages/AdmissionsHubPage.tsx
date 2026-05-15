@@ -275,7 +275,7 @@ export default function AdmissionsHubPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{a.studentName}</p>
                     <p className="text-[0.6875rem] text-[var(--text-muted)]">
-                      <span className="font-semibold text-[#002c98]">{a.applicationNo}</span> &middot; Class {a.classApplied} &middot; {a.appliedDate}
+                      Class {a.classApplied} &middot; {a.appliedDate}
                     </p>
                   </div>
                   <div className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full', st.bg)}>

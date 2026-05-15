@@ -72,7 +72,7 @@ export const rolesApi = {
       mockRolesDb = [role, ...mockRolesDb];
       return mockDelay(role);
     }
-    const res = await api.post<ApiEnvelope<Role>>(`/schools/${schoolId}/roles`, body);
+    const res = await api.post<ApiEnvelope<Role>>(`/schools/${schoolId}/roles`, { schoolId, ...body });
     return res.data;
   },
 

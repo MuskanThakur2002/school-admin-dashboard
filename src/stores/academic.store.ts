@@ -4,7 +4,7 @@ import type {
   AcademicYear, ClassGroup, Section, Subject, TimetableSlot, House,
   CreateAcademicYearDto,
   CreateClassDto, UpdateClassDto, CreateSectionDto, UpdateSectionDto,
-  CreateSubjectDto, CreateTimetableSlotDto, CreateHouseDto,
+  CreateSubjectDto, UpdateSubjectDto, CreateTimetableSlotDto, CreateHouseDto,
   RolloverPreview, RolloverRequest, RolloverResult,
 } from '@/types/academic.types';
 
@@ -40,6 +40,7 @@ interface AcademicState {
   // ─── Subjects ──────────────────────────────────
   fetchSubjects: () => Promise<void>;
   createSubject: (dto: CreateSubjectDto) => Promise<Subject>;
+  updateSubject: (id: string, dto: UpdateSubjectDto) => Promise<Subject>;
   deleteSubject: (id: string) => Promise<void>;
 
   // ─── Timetable ─────────────────────────────────
@@ -154,8 +155,16 @@ export const useAcademicStore = create<AcademicState>((set) => ({
 
   createSubject: async (dto) => {
     const created = await academicApi.createSubject(dto);
-    set((state) => ({ subjects: [...state.subjects, created] }));
+    const fresh = await academicApi.getSubjects();
+    set({ subjects: fresh });
     return created;
+  },
+
+  updateSubject: async (id, dto) => {
+    const updated = await academicApi.updateSubject(id, dto);
+    const fresh = await academicApi.getSubjects();
+    set({ subjects: fresh });
+    return updated;
   },
 
   deleteSubject: async (id) => {

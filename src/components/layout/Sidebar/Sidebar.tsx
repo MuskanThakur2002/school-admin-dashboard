@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, HeartHandshake, Wallet, BookOpen,
-  Receipt, CreditCard, Bell, BarChart3, Building2, Settings,
+  Receipt, CreditCard, Bell, BarChart3, Building2, Settings, ClipboardCheck,
   ChevronLeft, ChevronRight, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { label: 'Academic', path: '/academic', icon: GraduationCap, permission: 'academic.read' },
   { label: 'Students', path: '/students', icon: Users, permission: 'students.read' },
   { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
+  { label: 'Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
   { label: 'Parents', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
   { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read' },
   { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },

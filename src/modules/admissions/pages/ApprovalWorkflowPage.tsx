@@ -9,14 +9,9 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
+import { useAcademicStore } from '@/stores/academic.store';
+import { useParentStore } from '@/stores/parent.store';
 import type { Application } from '@/types/admissions.types';
-
-const sectionOptions = [
-  { label: 'A', value: 'A' },
-  { label: 'B', value: 'B' },
-  { label: 'C', value: 'C' },
-  { label: 'D', value: 'D' },
-];
 
 export default function ApprovalWorkflowPage() {
   const applications = useAdmissionsStore((s) => s.applications);
@@ -26,52 +21,110 @@ export default function ApprovalWorkflowPage() {
     [applications],
   );
   const fetchApplications = useAdmissionsStore((s) => s.fetchApplications);
+  const fetchDocuments = useAdmissionsStore((s) => s.fetchApplicationDocuments);
   const approveApplication = useAdmissionsStore((s) => s.approveApplication);
   const rejectApplication = useAdmissionsStore((s) => s.rejectApplication);
   const showToast = useUIStore((s) => s.showToast);
 
-  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
+  const parents = useParentStore((s) => s.parents);
+  const fetchParents = useParentStore((s) => s.fetchParents);
+
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const selectedApp = useMemo(
+    () => applications.find((a) => a.id === selectedAppId) || null,
+    [applications, selectedAppId],
+  );
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
 
-  const [assignedClass, setAssignedClass] = useState('');
-  const [assignedSection, setAssignedSection] = useState('A');
+  const [assignedClassId, setAssignedClassId] = useState('');
+  const [assignedSectionId, setAssignedSectionId] = useState('');
+  const [assignedParentId, setAssignedParentId] = useState('');
+  const [transportRoute, setTransportRoute] = useState('');
+  const [medicalNotes, setMedicalNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchApplications();
-  }, [fetchApplications]);
+    if (classes.length === 0) fetchClasses();
+    if (parents.length === 0) fetchParents(1, 100);
+  }, [fetchApplications, fetchClasses, fetchParents, classes.length, parents.length]);
+
+  const selectedClass = useMemo(
+    () => classes.find((c) => c.id === assignedClassId) || null,
+    [classes, assignedClassId],
+  );
+  const classOptions = useMemo(
+    () => [
+      { label: 'Select class...', value: '' },
+      ...classes.map((c) => ({ label: c.name, value: c.id })),
+    ],
+    [classes],
+  );
+  const sectionOptions = useMemo(
+    () => [
+      { label: selectedClass ? 'Select section...' : 'Pick a class first', value: '' },
+      ...(selectedClass?.sections ?? []).map((s) => ({ label: `Section ${s.name}`, value: s.id })),
+    ],
+    [selectedClass],
+  );
 
   const openApprove = (app: Application) => {
-    setSelectedApp(app);
-    setAssignedClass(app.classApplied);
-    setAssignedSection('A');
+    setSelectedAppId(app.id);
+    const classMatch = classes.find(
+      (c) => c.name.toLowerCase() === app.classApplied?.toLowerCase(),
+    );
+    setAssignedClassId(classMatch?.id ?? '');
+    setAssignedSectionId('');
+    // Pre-select a parent by phone or email match against the application's text fields.
+    const phone = app.parentPhone?.trim();
+    const email = app.parentEmail?.trim().toLowerCase();
+    const parentMatch = parents.find((p) => {
+      const pPhone = p.user?.phoneNumber?.trim();
+      const pEmail = p.user?.email?.trim().toLowerCase();
+      return (phone && pPhone === phone) || (email && pEmail === email);
+    });
+    setAssignedParentId(parentMatch?.id ?? '');
+    setTransportRoute('');
+    setMedicalNotes('');
     setApproveModalOpen(true);
+    // Load documents so the verified-docs warning reflects reality.
+    fetchDocuments(app.id).catch(() => {});
   };
 
   const openReject = (app: Application) => {
-    setSelectedApp(app);
+    setSelectedAppId(app.id);
     setRejectionReason('');
     setRejectModalOpen(true);
   };
 
   const handleApprove = async () => {
     if (!selectedApp) return;
-    if (!assignedClass || !assignedSection) {
+    if (!assignedClassId || !assignedSectionId) {
       showToast({ type: 'error', title: 'Missing fields', message: 'Please assign a class and section' });
       return;
     }
     setSubmitting(true);
     try {
-      const updated = await approveApplication(selectedApp.id, { assignedClass, assignedSection });
+      const updated = await approveApplication(selectedApp.id, {
+        assignedClass: assignedClassId,
+        assignedSection: assignedSectionId,
+        parentId: assignedParentId || undefined,
+        transportRoute: transportRoute.trim() || undefined,
+        medicalNotes: medicalNotes.trim() || undefined,
+      });
+      const className = selectedClass?.name ?? 'class';
+      const sectionName = selectedClass?.sections.find((s) => s.id === assignedSectionId)?.name ?? '';
       showToast({
         type: 'success',
         title: 'Application approved',
-        message: `${updated.admissionNo} created — ${updated.studentName} assigned to ${updated.assignedClass}-${updated.assignedSection}`,
+        message: `${updated.admissionNo} created — ${updated.studentName} → ${className}${sectionName ? ` · ${sectionName}` : ''}`,
       });
       setApproveModalOpen(false);
-      setSelectedApp(null);
+      setSelectedAppId(null);
     } catch (err) {
       showToast({ type: 'error', title: 'Approval failed', message: (err as Error).message });
     } finally {
@@ -89,7 +142,7 @@ export default function ApprovalWorkflowPage() {
       await rejectApplication(selectedApp.id, rejectionReason);
       showToast({ type: 'error', title: 'Application rejected', message: selectedApp.studentName });
       setRejectModalOpen(false);
-      setSelectedApp(null);
+      setSelectedAppId(null);
     } catch (err) {
       showToast({ type: 'error', title: 'Rejection failed', message: (err as Error).message });
     } finally {
@@ -132,7 +185,9 @@ export default function ApprovalWorkflowPage() {
         <div className="space-y-3">
           {pending.map((app, idx) => {
             const initials = app.studentName.split(' ').map((n) => n[0]).join('');
-            const docsComplete = app.documentsVerified === app.documentsCount;
+            // documentsCount=0 means docs haven't been fetched (loaded lazily on app drawer open).
+            const docsKnown = app.documentsCount > 0;
+            const docsComplete = docsKnown && app.documentsVerified === app.documentsCount;
             return (
               <div
                 key={app.id}
@@ -147,10 +202,10 @@ export default function ApprovalWorkflowPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1.5">
                       <h3 className="text-[1rem] font-bold text-[var(--text-primary)]">{app.studentName}</h3>
-                      <span className="px-2 py-0.5 rounded-md bg-[#f0f4ff] text-[0.625rem] font-bold text-[#002c98] tracking-wide">
-                        {app.applicationNo}
+                      <span className="font-mono text-[0.625rem] font-semibold text-[var(--text-muted)]">
+                        #{app.id.slice(0, 8).toUpperCase()}
                       </span>
-                      {!docsComplete && (
+                      {docsKnown && !docsComplete && (
                         <span className="px-2 py-0.5 rounded-md bg-amber-50 text-[0.625rem] font-bold text-amber-600 tracking-wide">
                           Docs Pending ({app.documentsVerified}/{app.documentsCount})
                         </span>
@@ -212,7 +267,7 @@ export default function ApprovalWorkflowPage() {
           open={approveModalOpen}
           onOpenChange={setApproveModalOpen}
           title={`Approve: ${selectedApp.studentName}`}
-          description={`${selectedApp.applicationNo} — Assign class and section to generate admission number`}
+          description="Assign class and section to generate the admission number"
           size="md"
           footer={
             <>
@@ -233,23 +288,95 @@ export default function ApprovalWorkflowPage() {
               </div>
               <div className="flex-1">
                 <p className="text-[0.875rem] font-semibold text-[var(--text-primary)]">{selectedApp.studentName}</p>
-                <p className="text-[0.6875rem] text-[var(--text-muted)]">{selectedApp.parentName} &middot; Applied for Class {selectedApp.classApplied}</p>
+                <p className="text-[0.6875rem] text-[var(--text-muted)]">
+                  {selectedApp.parentName} &middot; Applied for Class {selectedApp.classApplied}
+                  {selectedApp.documentsCount > 0 && (
+                    <> &middot; Docs {selectedApp.documentsVerified}/{selectedApp.documentsCount} verified</>
+                  )}
+                </p>
               </div>
             </div>
 
+            {/* Soft gate: no verified docs */}
+            {selectedApp.documentsVerified === 0 && (
+              <div className="rounded-xl bg-amber-50 p-4 border border-amber-200">
+                <p className="text-[0.75rem] font-bold text-amber-900 mb-1">
+                  ⚠ No documents verified
+                </p>
+                <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
+                  {selectedApp.documentsCount === 0
+                    ? 'This application has no documents uploaded. Approving will create the student without any paperwork on file.'
+                    : `${selectedApp.documentsCount} document${selectedApp.documentsCount === 1 ? '' : 's'} uploaded but none verified yet. Verify them from the application drawer before approving — or proceed anyway if you're sure.`}
+                </p>
+              </div>
+            )}
+
             {/* Assignment */}
             <div className="grid grid-cols-2 gap-4">
-              <Input
+              <Select
                 label="Assign Class *"
-                value={assignedClass}
-                onChange={(e) => setAssignedClass(e.target.value)}
-                placeholder="e.g. V"
+                options={classOptions}
+                value={assignedClassId}
+                onChange={(e) => {
+                  setAssignedClassId(e.target.value);
+                  setAssignedSectionId('');
+                }}
               />
               <Select
                 label="Assign Section *"
                 options={sectionOptions}
-                value={assignedSection}
-                onChange={(e) => setAssignedSection(e.target.value)}
+                value={assignedSectionId}
+                onChange={(e) => setAssignedSectionId(e.target.value)}
+                disabled={!assignedClassId}
+              />
+            </div>
+
+            {assignedClassId && (selectedClass?.sections.length ?? 0) === 0 && (
+              <div className="rounded-xl bg-amber-50 p-3">
+                <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
+                  This class has no sections yet. Create one in Academic Setup first.
+                </p>
+              </div>
+            )}
+
+            {/* Parent linkage — auto-matched by phone/email from the admission form. */}
+            {(() => {
+              const linkedParent = parents.find((p) => p.id === assignedParentId);
+              return linkedParent ? (
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-0.5">Parent linked</p>
+                  <p className="text-[0.75rem] font-semibold text-emerald-900">
+                    {linkedParent.user?.name ?? '—'}
+                    {linkedParent.user?.email ? ` · ${linkedParent.user.email}` : ''}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-amber-50 p-3">
+                  <p className="text-[0.625rem] font-semibold text-amber-800 uppercase tracking-[0.06em] mb-0.5">No parent linked</p>
+                  <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
+                    No parent matched this application's phone or email. Student will be created without a parent link — fix from Students later.
+                  </p>
+                </div>
+              );
+            })()}
+
+            <Input
+              label="Transport Route (optional)"
+              value={transportRoute}
+              onChange={(e) => setTransportRoute(e.target.value)}
+              placeholder="e.g. Route 4 — Sector 12"
+            />
+
+            <div>
+              <label className="block text-[0.6875rem] font-semibold text-[var(--text-tertiary)] mb-1.5">
+                Medical Notes (optional)
+              </label>
+              <textarea
+                value={medicalNotes}
+                onChange={(e) => setMedicalNotes(e.target.value)}
+                placeholder="Allergies, conditions, medication, etc."
+                rows={2}
+                className="w-full bg-[var(--card-bg)] rounded-lg px-3 py-2 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] resize-none"
               />
             </div>
 
@@ -263,11 +390,17 @@ export default function ApprovalWorkflowPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>Student will be assigned to {assignedClass || '—'}-{assignedSection}</span>
+                  <span>
+                    Student will be enrolled in{' '}
+                    {selectedClass?.name ?? '—'}
+                    {selectedClass?.sections.find((s) => s.id === assignedSectionId)?.name
+                      ? ` · Section ${selectedClass?.sections.find((s) => s.id === assignedSectionId)?.name}`
+                      : ''}
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>Ledger will be initialized with applicable fee plan</span>
+                  <span>Student profile and enrollment are created atomically by the backend</span>
                 </li>
               </ul>
             </div>

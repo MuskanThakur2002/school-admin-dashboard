@@ -89,10 +89,7 @@ export default function TimetablePage() {
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
   const selectedSection = selectedClass?.sections.find((s) => s.id === selectedSectionId);
-  const availableSubjects = useMemo(
-    () => (selectedClass ? subjects.filter((s) => s.classes.includes(selectedClass.shortName)) : []),
-    [subjects, selectedClass],
-  );
+  const availableSubjects = subjects;
 
   const handleClassChange = (classId: string) => {
     setSelectedClassId(classId);
@@ -117,12 +114,17 @@ export default function TimetablePage() {
       showToast({ type: 'error', title: 'Missing fields', message: 'Subject and teacher are required' });
       return;
     }
+    const subject = subjects.find((s) => s.id === formSubjectId);
+    if (!subject) {
+      showToast({ type: 'error', title: 'Subject not found', message: 'Pick a valid subject' });
+      return;
+    }
     setSubmitting(true);
     try {
       await setTimetableSlot({
         classId: selectedClassId, sectionId: selectedSectionId,
         day: editorDay, period: editorPeriod,
-        subjectId: formSubjectId, teacher: formTeacher,
+        subjectId: formSubjectId, subjectName: subject.name, teacher: formTeacher,
       });
       const fresh = await academicApi.getTimetable(selectedClassId, selectedSectionId);
       setSlots(fresh);
@@ -312,7 +314,7 @@ export default function TimetablePage() {
             options={availableSubjects.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))}
             value={formSubjectId}
             onChange={(e) => setFormSubjectId(e.target.value)}
-            placeholder={availableSubjects.length === 0 ? 'No subjects assigned to this class' : 'Select subject'}
+            placeholder={availableSubjects.length === 0 ? 'No subjects yet' : 'Select subject'}
           />
           <Input
             label="Teacher *"

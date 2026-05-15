@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, User, Calendar, Phone, Mail, Wallet,
+  ArrowLeft, User, Calendar, Phone, Mail, Wallet, Pencil,
 } from 'lucide-react';
 import { useParentStore } from '@/stores/parent.store';
+import { usersApi } from '@/services/modules/users.api';
+import { useAuthStore } from '@/stores/auth.store';
+import { useUIStore } from '@/stores/ui.store';
+import { isSuperAdmin } from '@/types/auth.types';
+import { Modal } from '@/components/ui/Modal/Modal';
+import { Input } from '@/components/ui/Input/Input';
+import { Button } from '@/components/ui/Button/Button';
 import type { Parent } from '@/types/parent.types';
+import type { User as UserModel } from '@/types/user.types';
 
 function formatIncome(value: number): string {
   if (!Number.isFinite(value)) return '—';
@@ -42,10 +50,13 @@ export default function ParentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const getParent = useParentStore((s) => s.getParent);
+  const updateParent = useParentStore((s) => s.updateParent);
+  const showToast = useUIStore((s) => s.showToast);
 
   const [parent, setParent] = useState<Parent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -96,12 +107,21 @@ export default function ParentProfilePage() {
 
   return (
     <div className="max-w-[1280px]">
-      <button
-        onClick={() => navigate('/parents')}
-        className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Parents
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => navigate('/parents')}
+          className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Parents
+        </button>
+        <button
+          onClick={() => setEditOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
+        >
+          <Pencil className="w-4 h-4" />
+          Edit
+        </button>
+      </div>
 
       <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
         <div className="flex flex-col md:flex-row md:items-center gap-5">
@@ -143,6 +163,150 @@ export default function ParentProfilePage() {
           </div>
         </SectionCard>
       </div>
+
+      <EditParentModal
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        parent={parent}
+        onSave={async (input) => {
+          const updated = await updateParent(parent.id, input);
+          setParent(updated);
+          showToast({ type: 'success', title: 'Parent updated', message: updated.user?.name ?? '' });
+        }}
+        onError={(message) => showToast({ type: 'error', title: 'Failed to update parent', message })}
+      />
     </div>
+  );
+}
+
+// ─── Edit Parent modal ────────────────────────────────────────
+
+interface EditParentModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  parent: Parent;
+  onSave: (input: {
+    userId: string;
+    user?: { name?: string; email?: string; phoneNumber?: string; whatsapp?: string; address?: string };
+    parent?: { annualIncome?: number };
+  }) => Promise<void>;
+  onError: (message: string) => void;
+}
+
+function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditParentModalProps) {
+  const authUser = useAuthStore((s) => s.user);
+  const activeSchoolId = useAuthStore((s) => s.activeSchoolId);
+  const schoolId = isSuperAdmin(authUser) ? activeSchoolId : authUser?.schoolId ?? null;
+
+  const [form, setForm] = useState({
+    name: '', email: '', phoneNumber: '', whatsapp: '', address: '',
+    annualIncome: '',
+  });
+  const [initial, setInitial] = useState(form);
+  const [loadingUser, setLoadingUser] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !schoolId) return;
+    setLoadingUser(true);
+    usersApi.getById(schoolId, parent.userId)
+      .then((u: UserModel) => {
+        const next = {
+          name: u.name ?? '',
+          email: u.email ?? '',
+          phoneNumber: u.phoneNumber ?? '',
+          whatsapp: u.whatsapp ?? '',
+          address: u.address ?? '',
+          annualIncome: String(parent.annualIncome ?? ''),
+        };
+        setForm(next);
+        setInitial(next);
+      })
+      .catch((err) => onError((err as Error).message))
+      .finally(() => setLoadingUser(false));
+  }, [open, schoolId, parent.userId, parent.annualIncome, onError]);
+
+  const update = <K extends keyof typeof form>(key: K, value: string) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  const incomeNumber = Number(form.annualIncome);
+  const incomeValid = form.annualIncome.trim() !== '' && Number.isFinite(incomeNumber) && incomeNumber >= 0;
+  const canSubmit = form.name.trim() && form.email.trim() && incomeValid && !loadingUser;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || saving) return;
+    setSaving(true);
+    try {
+      const userPatch: Record<string, string> = {};
+      if (form.name.trim() !== initial.name) userPatch.name = form.name.trim();
+      if (form.email.trim() !== initial.email) userPatch.email = form.email.trim();
+      if (form.phoneNumber.trim() !== initial.phoneNumber) userPatch.phoneNumber = form.phoneNumber.trim();
+      if (form.whatsapp.trim() !== initial.whatsapp) userPatch.whatsapp = form.whatsapp.trim();
+      if (form.address.trim() !== initial.address) userPatch.address = form.address.trim();
+
+      const parentPatch: { annualIncome?: number } = {};
+      if (incomeNumber !== parent.annualIncome) parentPatch.annualIncome = incomeNumber;
+
+      await onSave({
+        userId: parent.userId,
+        user: Object.keys(userPatch).length ? userPatch : undefined,
+        parent: Object.keys(parentPatch).length ? parentPatch : undefined,
+      });
+      onOpenChange(false);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Parent"
+      description="Update the parent's account and parent details."
+      size="lg"
+      footer={
+        <>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={handleSubmit} loading={saving} disabled={!canSubmit}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      {loadingUser ? (
+        <p className="text-[0.8125rem] text-[var(--text-muted)] py-6 text-center">Loading parent details...</p>
+      ) : (
+        <div className="space-y-5">
+          <div>
+            <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} />
+              <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
+              <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} />
+              <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} />
+              <div className="md:col-span-2">
+                <Input label="Address" value={form.address} onChange={(e) => update('address', e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Parent details</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Annual income (INR) *"
+                type="number"
+                min={0}
+                value={form.annualIncome}
+                onChange={(e) => update('annualIncome', e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }

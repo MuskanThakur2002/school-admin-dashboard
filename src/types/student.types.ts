@@ -94,3 +94,81 @@ export interface ParentGuardian {
   occupation?: string;
   annualIncome?: string;
 }
+
+// ─── Student Enrollment ─────────────────────────────────────────
+// One enrollment row per (student, class-section, academic year).
+// `joinedAt` / `leftAt` track tenure within that section.
+
+export interface EnrollmentStudentRef {
+  id: string;
+  schoolId: string;
+  admissionNumber: string;
+  name: string;
+  dateOfBirth: string;
+  gender: StudentGender;
+  parentId: string;
+  status: string;
+  enrollmentDate: string | null;
+}
+
+export interface EnrollmentClassSectionRef {
+  id: string;
+  schoolId: string;
+  classMasterId: string;
+  academicYearId: string;
+  section: string;
+  status: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentEnrollment {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  classSectionId: string;
+  academicYearId: string;
+  rollNumber: number;
+  status: string;
+  joinedAt: string | null;
+  leftAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Populated on list endpoint; absent on getById.
+  student?: EnrollmentStudentRef;
+  classSection?: EnrollmentClassSectionRef;
+}
+
+export interface CreateEnrollmentDto {
+  studentId: string;
+  classSectionId: string;
+  academicYearId: string;
+  rollNumber: number;
+  status: string;
+  joinedAt: string;
+  leftAt?: string | null;
+}
+
+export type UpdateEnrollmentDto = Partial<{
+  classSectionId: string;
+  academicYearId: string;
+  rollNumber: number;
+  status: string;
+  joinedAt: string;
+  leftAt: string | null;
+}>;
+
+export interface EnrollmentListParams {
+  page?: number;
+  limit?: number;
+  studentId?: string;
+  classSectionId?: string;
+  academicYearId?: string;
+}
+
+export interface EnrollmentListResponse {
+  data: StudentEnrollment[];
+  total: number;
+  page: number;
+  limit: number;
+}

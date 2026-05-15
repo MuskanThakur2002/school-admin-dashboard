@@ -20,10 +20,16 @@ export interface Enquiry {
 export type ApplicationStatus = 'submitted' | 'under_review' | 'verified' | 'approved' | 'rejected';
 export type DocumentStatus = 'pending' | 'verified' | 'rejected';
 
+/**
+ * Document record returned by the backend's per-application documents endpoint.
+ * `fileUrl` is a pre-signed S3 URL valid for ~1 hour.
+ */
 export interface ApplicationDocument {
   id: string;
-  name: string;
-  status: DocumentStatus;
+  fileName: string;
+  fileUrl: string;
+  type: string;
+  isVerified: boolean;
   uploadedAt: string;
 }
 
@@ -53,7 +59,6 @@ export interface ApplicantAddress {
 
 export interface Application {
   id: string;
-  applicationNo: string;
   enquiryId?: string; // link back to originating enquiry if converted
 
   // Legacy flat fields (still populated for backwards compat / quick display)
@@ -69,7 +74,6 @@ export interface Application {
   applicant?: ApplicantDetails;
   parents?: ParentGuardian[];
   address?: ApplicantAddress;
-  siblingIds?: string[];
 
   documents: ApplicationDocument[];
   documentsVerified: number;
@@ -101,20 +105,28 @@ export interface UpdateEnquiryDto extends CreateEnquiryDto {
 }
 
 /**
- * Full admission form — used when admin directly starts an admission
- * (the SOW primary flow: "Admin captures student details...").
+ * Direct-admission form payload. Mirrors what the backend `POST /applications`
+ * accepts today — no extra fields silently dropped on POST.
  */
 export interface NewAdmissionDto {
-  applicant: ApplicantDetails;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: 'male' | 'female' | 'other';
   classApplied: string;
-  parents: ParentGuardian[];
-  address: ApplicantAddress;
-  previousSchool?: string;
-  siblingIds?: string[];
-  remarks?: string;
+  parentName: string;
+  parentPhone: string;
+  parentEmail?: string;
+  address?: string;
 }
 
 export interface ApproveApplicationDto {
+  /** classMasterId UUID. */
   assignedClass: string;
+  /** classSectionId UUID. */
   assignedSection: string;
+  /** Optional — backend approve doesn't accept these; they're applied via a follow-up PUT /students/:id. */
+  parentId?: string;
+  transportRoute?: string;
+  medicalNotes?: string;
 }

@@ -1,50 +1,60 @@
 /**
  * Fee Engine API Layer
- * Backend-swap point — replace function bodies with fetch() calls.
+ *
+ * Heads, Structures, and Structure Items are wired to the real backend.
+ * Installment Plans, Concessions, and Late-fee Rules remain on in-memory
+ * mocks pending Phase 2 (those pages will be hidden in the sidebar).
  */
-import type {
-  FeeHead, FeeStructure, InstallmentPlan, Concession, LateFeeRule,
-  CreateFeeHeadDto, CreateFeeStructureDto, CreateInstallmentPlanDto,
-  CreateConcessionDto, CreateLateFeeRuleDto, FeeStructureHead,
-} from '@/types/fee.types';
+import { api } from '@/services/api-client';
 import { format } from 'date-fns';
+import type {
+  FeeHead, FeeStructure, FeeStructureItem,
+  CreateFeeHeadDto, UpdateFeeHeadDto,
+  CreateFeeStructureDto, UpdateFeeStructureDto,
+  CreateFeeStructureItemDto, UpdateFeeStructureItemDto,
+  InstallmentPlan, Concession, LateFeeRule,
+  CreateInstallmentPlanDto, CreateConcessionDto, CreateLateFeeRuleDto,
+} from '@/types/fee.types';
 
+interface ApiEnvelope<T> {
+  success: boolean;
+  data: T;
+}
+
+interface PaginatedEnvelope<T> {
+  success: boolean;
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+}
+
+export interface FeeStructureItemListParams extends PaginationParams {
+  feeStructureId?: string;
+}
+
+function buildQuery(params?: object): string {
+  if (!params) return '';
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+// ═════════════════════════════════════════════════════════════
+// REAL BACKEND — Heads, Structures, Items
+// ═════════════════════════════════════════════════════════════
+
+// ─── Mock DBs (Phase 2 features still on mocks) ──────────────
 const D = 150;
 const delay = <T>(data: T): Promise<T> => new Promise((r) => setTimeout(() => r(data), D));
-
-// ─── Mock DBs ──────────────────────────────────────────────
-
-let headsDb: FeeHead[] = [
-  { id: 'fh1', name: 'Tuition Fee', code: 'TUI', type: 'recurring', category: 'tuition', amount: 5000, frequency: 'monthly', taxable: false, enabled: true },
-  { id: 'fh2', name: 'Annual Development Fund', code: 'ADF', type: 'one_time', category: 'tuition', amount: 15000, taxable: false, enabled: true },
-  { id: 'fh3', name: 'Transport Fee', code: 'TRN', type: 'recurring', category: 'transport', amount: 2500, frequency: 'monthly', taxable: true, enabled: true },
-  { id: 'fh4', name: 'Computer Lab Fee', code: 'LAB', type: 'one_time', category: 'lab', amount: 3000, taxable: true, enabled: true },
-  { id: 'fh5', name: 'Exam Fee', code: 'EXM', type: 'recurring', category: 'exam', amount: 1500, frequency: 'quarterly', taxable: false, enabled: true },
-  { id: 'fh6', name: 'Library Fee', code: 'LIB', type: 'one_time', category: 'library', amount: 1200, taxable: false, enabled: true },
-  { id: 'fh7', name: 'Sports & Activities', code: 'SPT', type: 'one_time', category: 'activity', amount: 2000, taxable: false, enabled: true },
-  { id: 'fh8', name: 'Hostel Fee', code: 'HST', type: 'recurring', category: 'hostel', amount: 8000, frequency: 'monthly', taxable: true, enabled: false },
-  { id: 'fh9', name: 'Smart Class Fee', code: 'SMT', type: 'one_time', category: 'other', amount: 2500, taxable: false, enabled: true },
-  { id: 'fh10', name: 'Uniform & Books', code: 'UNI', type: 'one_time', category: 'other', amount: 4500, taxable: true, enabled: true },
-];
-
-const buildHeads = (ids: string[]): FeeStructureHead[] =>
-  ids.map((id) => {
-    const h = headsDb.find((x) => x.id === id);
-    return h ? { feeHeadId: h.id, feeHeadName: h.name, amount: h.amount } : { feeHeadId: id, feeHeadName: '?', amount: 0 };
-  });
-
-let structuresDb: FeeStructure[] = [
-  { id: 'fs1', name: 'Primary (I–V) Standard', academicYear: '2025-26', classes: ['I', 'II', 'III', 'IV', 'V'],
-    heads: buildHeads(['fh1', 'fh2', 'fh6', 'fh7', 'fh9']), totalAmount: 68700, studentCount: 310, status: 'active' },
-  { id: 'fs2', name: 'Middle School (VI–VIII)', academicYear: '2025-26', classes: ['VI', 'VII', 'VIII'],
-    heads: buildHeads(['fh1', 'fh2', 'fh4', 'fh5', 'fh6', 'fh7']), totalAmount: 87200, studentCount: 280, status: 'active' },
-  { id: 'fs3', name: 'Senior Secondary (IX–X)', academicYear: '2025-26', classes: ['IX', 'X'],
-    heads: buildHeads(['fh1', 'fh2', 'fh4', 'fh5', 'fh6', 'fh9']), totalAmount: 106500, studentCount: 190, status: 'active' },
-  { id: 'fs4', name: 'Higher Secondary (XI–XII)', academicYear: '2025-26', classes: ['XI', 'XII'],
-    heads: buildHeads(['fh1', 'fh2', 'fh4', 'fh5', 'fh6']), totalAmount: 121000, studentCount: 152, status: 'active' },
-  { id: 'fs5', name: 'Transport Add-on', academicYear: '2025-26', classes: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'],
-    heads: buildHeads(['fh3']), totalAmount: 30000, studentCount: 420, status: 'active' },
-];
 
 let plansDb: InstallmentPlan[] = [
   { id: 'ip1', name: 'Quarterly Plan', description: '4 equal quarterly installments', installments: [
@@ -82,60 +92,126 @@ let lateRulesDb: LateFeeRule[] = [
 // ═════════════════════════════════════════════════════════════
 
 export const feeApi = {
-  // ─── Fee Heads ──────────────────────────────────────────
-  getHeads: (): Promise<FeeHead[]> => delay([...headsDb]),
-
-  createHead: (dto: CreateFeeHeadDto): Promise<FeeHead> => {
-    const head: FeeHead = { id: crypto.randomUUID(), ...dto, code: dto.code.toUpperCase(), enabled: true };
-    headsDb = [...headsDb, head];
-    return delay(head);
+  // ─── Fee Heads (real backend) ───────────────────────────
+  /** GET /schools/:schoolId/fee-heads */
+  listHeads: async (schoolId: string, params?: PaginationParams) => {
+    const res = await api.get<PaginatedEnvelope<FeeHead>>(
+      `/schools/${schoolId}/fee-heads${buildQuery(params)}`,
+    );
+    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
-  updateHead: (id: string, patch: Partial<FeeHead>): Promise<FeeHead> => {
-    const idx = headsDb.findIndex((h) => h.id === id);
-    if (idx === -1) return Promise.reject(new Error('Not found'));
-    headsDb[idx] = { ...headsDb[idx], ...patch };
-    return delay(headsDb[idx]);
+  /** GET /schools/:schoolId/fee-heads/:id */
+  getHead: async (schoolId: string, id: string): Promise<FeeHead> => {
+    const res = await api.get<ApiEnvelope<FeeHead>>(`/schools/${schoolId}/fee-heads/${id}`);
+    return res.data;
   },
 
-  deleteHead: (id: string): Promise<void> => {
-    headsDb = headsDb.filter((h) => h.id !== id);
-    return delay(undefined);
+  /** POST /schools/:schoolId/fee-heads */
+  createHead: async (schoolId: string, body: CreateFeeHeadDto): Promise<FeeHead> => {
+    const res = await api.post<ApiEnvelope<FeeHead>>(
+      `/schools/${schoolId}/fee-heads`,
+      { schoolId, ...body },
+    );
+    return res.data;
   },
 
-  toggleHead: (id: string): Promise<FeeHead> => {
-    const idx = headsDb.findIndex((h) => h.id === id);
-    if (idx === -1) return Promise.reject(new Error('Not found'));
-    headsDb[idx] = { ...headsDb[idx], enabled: !headsDb[idx].enabled };
-    return delay(headsDb[idx]);
+  /** PUT /schools/:schoolId/fee-heads/:id */
+  updateHead: async (schoolId: string, id: string, body: UpdateFeeHeadDto): Promise<FeeHead> => {
+    const res = await api.put<ApiEnvelope<FeeHead>>(
+      `/schools/${schoolId}/fee-heads/${id}`,
+      { schoolId, ...body },
+    );
+    return res.data;
   },
 
-  // ─── Fee Structures ─────────────────────────────────────
-  getStructures: (): Promise<FeeStructure[]> => delay([...structuresDb]),
-
-  createStructure: (dto: CreateFeeStructureDto): Promise<FeeStructure> => {
-    const heads = buildHeads(dto.headIds);
-    const total = heads.reduce((s, h) => s + h.amount, 0);
-    const structure: FeeStructure = {
-      id: crypto.randomUUID(), name: dto.name, academicYear: dto.academicYear,
-      classes: dto.classes, heads, totalAmount: total, studentCount: 0, status: dto.status,
-    };
-    structuresDb = [...structuresDb, structure];
-    return delay(structure);
+  /** DELETE /schools/:schoolId/fee-heads/:id */
+  deleteHead: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-heads/${id}`);
   },
 
-  deleteStructure: (id: string): Promise<void> => {
-    structuresDb = structuresDb.filter((s) => s.id !== id);
-    return delay(undefined);
+  // ─── Fee Structures (real backend) ──────────────────────
+  /** GET /schools/:schoolId/fee-structures */
+  listStructures: async (schoolId: string, params?: PaginationParams) => {
+    const res = await api.get<PaginatedEnvelope<FeeStructure>>(
+      `/schools/${schoolId}/fee-structures${buildQuery(params)}`,
+    );
+    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
-  /** Find the fee structure that applies to a given class (used during approval). */
-  getStructureForClass: (className: string): Promise<FeeStructure | null> => {
-    const match = structuresDb.find((s) => s.status === 'active' && s.classes.includes(className));
-    return delay(match || null);
+  /** GET /schools/:schoolId/fee-structures/:id */
+  getStructure: async (schoolId: string, id: string): Promise<FeeStructure> => {
+    const res = await api.get<ApiEnvelope<FeeStructure>>(`/schools/${schoolId}/fee-structures/${id}`);
+    return res.data;
   },
 
-  // ─── Installment Plans ──────────────────────────────────
+  /** POST /schools/:schoolId/fee-structures */
+  createStructure: async (schoolId: string, body: CreateFeeStructureDto): Promise<FeeStructure> => {
+    const res = await api.post<ApiEnvelope<FeeStructure>>(
+      `/schools/${schoolId}/fee-structures`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/fee-structures/:id */
+  updateStructure: async (
+    schoolId: string,
+    id: string,
+    body: UpdateFeeStructureDto,
+  ): Promise<FeeStructure> => {
+    const res = await api.put<ApiEnvelope<FeeStructure>>(
+      `/schools/${schoolId}/fee-structures/${id}`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/fee-structures/:id */
+  deleteStructure: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-structures/${id}`);
+  },
+
+  // ─── Fee Structure Items (real backend) ─────────────────
+  /** GET /schools/:schoolId/fee-structure-items */
+  listItems: async (schoolId: string, params?: FeeStructureItemListParams) => {
+    const res = await api.get<PaginatedEnvelope<FeeStructureItem>>(
+      `/schools/${schoolId}/fee-structure-items${buildQuery(params)}`,
+    );
+    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
+  },
+
+  /** POST /schools/:schoolId/fee-structure-items */
+  createItem: async (
+    schoolId: string,
+    body: CreateFeeStructureItemDto,
+  ): Promise<FeeStructureItem> => {
+    const res = await api.post<ApiEnvelope<FeeStructureItem>>(
+      `/schools/${schoolId}/fee-structure-items`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/fee-structure-items/:id */
+  updateItem: async (
+    schoolId: string,
+    id: string,
+    body: UpdateFeeStructureItemDto,
+  ): Promise<FeeStructureItem> => {
+    const res = await api.put<ApiEnvelope<FeeStructureItem>>(
+      `/schools/${schoolId}/fee-structure-items/${id}`,
+      body,
+    );
+    return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/fee-structure-items/:id */
+  deleteItem: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-structure-items/${id}`);
+  },
+
+  // ─── Installment Plans (mock — Phase 2) ─────────────────
   getPlans: (): Promise<InstallmentPlan[]> => delay([...plansDb]),
 
   createPlan: (dto: CreateInstallmentPlanDto): Promise<InstallmentPlan> => {
@@ -149,7 +225,7 @@ export const feeApi = {
     return delay(undefined);
   },
 
-  // ─── Concessions ────────────────────────────────────────
+  // ─── Concessions (mock — Phase 2) ───────────────────────
   getConcessions: (): Promise<Concession[]> => delay([...concessionsDb]),
 
   createConcession: (dto: CreateConcessionDto): Promise<Concession> => {
@@ -166,7 +242,7 @@ export const feeApi = {
     return delay(undefined);
   },
 
-  // ─── Late Fee Rules ─────────────────────────────────────
+  // ─── Late Fee Rules (mock — Phase 2) ────────────────────
   getRules: (): Promise<LateFeeRule[]> => delay([...lateRulesDb]),
 
   createRule: (dto: CreateLateFeeRuleDto): Promise<LateFeeRule> => {

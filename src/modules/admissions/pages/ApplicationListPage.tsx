@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Search, X, Upload, ArrowRight,
   Download, User, Phone, GraduationCap, Calendar, FileText, Mail,
-  AlertTriangle, ChevronRight,
+  AlertTriangle, ChevronRight, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input/Input';
@@ -10,9 +10,10 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
-import { useFeeStore } from '@/stores/fee.store';
+import { useAcademicStore } from '@/stores/academic.store';
+import { useParentStore } from '@/stores/parent.store';
+import { documentTypeOptions, formatDocumentTypeLabel } from '@/utils/constants';
 import type { Application, ApplicationStatus } from '@/types/admissions.types';
-import type { FeeStructure } from '@/types/fee.types';
 
 // ─── Status config ──────────────────────────────────────────
 
@@ -35,11 +36,6 @@ const filterPills: { value: FilterValue; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
 ];
 
-const sectionOptions = [
-  { label: 'A', value: 'A' }, { label: 'B', value: 'B' },
-  { label: 'C', value: 'C' }, { label: 'D', value: 'D' },
-];
-
 // ─── Component ──────────────────────────────────────────────
 
 export default function ApplicationListPage() {
@@ -47,30 +43,54 @@ export default function ApplicationListPage() {
   const loading = useAdmissionsStore((s) => s.applicationsLoading);
   const fetchApplications = useAdmissionsStore((s) => s.fetchApplications);
   const advanceStatus = useAdmissionsStore((s) => s.advanceApplicationStatus);
-  const uploadDocument = useAdmissionsStore((s) => s.uploadDocument);
+  const fetchDocuments = useAdmissionsStore((s) => s.fetchApplicationDocuments);
+  const uploadDocument = useAdmissionsStore((s) => s.uploadApplicationDocument);
+  const verifyDocument = useAdmissionsStore((s) => s.verifyApplicationDocument);
   const approveApplication = useAdmissionsStore((s) => s.approveApplication);
   const rejectApplication = useAdmissionsStore((s) => s.rejectApplication);
   const showToast = useUIStore((s) => s.showToast);
+
+  // Class / section picker source for the approve modal.
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
+  // Parent picker source for the approve modal.
+  const parents = useParentStore((s) => s.parents);
+  const fetchParents = useParentStore((s) => s.fetchParents);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Fee lookup
-  const getStructureForClass = useFeeStore((s) => s.getStructureForClass);
-  const [feePreview, setFeePreview] = useState<FeeStructure | null>(null);
-
-  // Approve/Reject inline state (inside drawer)
+  // Approve/Reject inline state (inside drawer). Values are UUIDs.
   const [showApproveForm, setShowApproveForm] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const [assignedClass, setAssignedClass] = useState('');
-  const [assignedSection, setAssignedSection] = useState('A');
+  const [assignedClassId, setAssignedClassId] = useState('');
+  const [assignedSectionId, setAssignedSectionId] = useState('');
+  const [assignedParentId, setAssignedParentId] = useState('');
+  const [transportRoute, setTransportRoute] = useState('');
+  const [medicalNotes, setMedicalNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Upload form state
+  const [uploadFormOpen, setUploadFormOpen] = useState(false);
+  const [uploadType, setUploadType] = useState('');
+  const [uploadCustomType, setUploadCustomType] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (applications.length === 0) fetchApplications();
-  }, [applications.length, fetchApplications]);
+    if (classes.length === 0) fetchClasses();
+    if (parents.length === 0) fetchParents(1, 100);
+  }, [applications.length, classes.length, parents.length, fetchApplications, fetchClasses, fetchParents]);
+
+  // Load documents whenever a drawer opens.
+  useEffect(() => {
+    if (selectedId) fetchDocuments(selectedId).catch(() => {});
+  }, [selectedId, fetchDocuments]);
 
   // Derive selected app from store so it stays in sync
   const selectedApp = useMemo(
@@ -83,9 +103,16 @@ export default function ApplicationListPage() {
     setSelectedId(null);
     setShowApproveForm(false);
     setShowRejectForm(false);
-    setAssignedClass('');
-    setAssignedSection('A');
+    setAssignedClassId('');
+    setAssignedSectionId('');
+    setAssignedParentId('');
+    setTransportRoute('');
+    setMedicalNotes('');
     setRejectionReason('');
+    setUploadFormOpen(false);
+    setUploadType('');
+    setUploadCustomType('');
+    setUploadFile(null);
   };
 
   // Filtering
@@ -94,7 +121,6 @@ export default function ApplicationListPage() {
       const matchesFilter = filter === 'all' || a.status === filter;
       const matchesSearch = !search ||
         a.studentName.toLowerCase().includes(search.toLowerCase()) ||
-        a.applicationNo.toLowerCase().includes(search.toLowerCase()) ||
         a.parentName.toLowerCase().includes(search.toLowerCase());
       return matchesFilter && matchesSearch;
     });
@@ -120,48 +146,109 @@ export default function ApplicationListPage() {
     }
   };
 
-  const handleUploadDoc = async (docId: string) => {
-    if (!selectedApp) return;
-    const fileName = `uploaded-${Date.now()}.pdf`;
+  const resetUploadForm = () => {
+    setUploadFormOpen(false);
+    setUploadType('');
+    setUploadCustomType('');
+    setUploadFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const canUpload =
+    !!uploadFile &&
+    !!uploadType &&
+    (uploadType !== 'other' || uploadCustomType.trim().length > 0);
+
+  const handleUpload = async () => {
+    if (!selectedApp || !uploadFile || !uploadType) return;
+    const finalType = uploadType === 'other' ? uploadCustomType : uploadType;
+    setUploading(true);
     try {
-      await uploadDocument(selectedApp.id, docId, fileName);
-      showToast({ type: 'success', title: 'Document uploaded' });
+      await uploadDocument(selectedApp.id, uploadFile, finalType);
+      showToast({ type: 'success', title: 'Document uploaded', message: uploadFile.name });
+      resetUploadForm();
     } catch (err) {
       showToast({ type: 'error', title: 'Upload failed', message: (err as Error).message });
+    } finally {
+      setUploading(false);
     }
   };
 
-  const openApproveForm = async () => {
+  const handleVerifyDoc = async (docId: string) => {
     if (!selectedApp) return;
-    setAssignedClass(selectedApp.classApplied);
-    setAssignedSection('A');
-    // Look up fee structure for this class
     try {
-      const structure = await getStructureForClass(selectedApp.classApplied);
-      setFeePreview(structure);
-    } catch {
-      setFeePreview(null);
+      await verifyDocument(selectedApp.id, docId);
+      showToast({ type: 'success', title: 'Document verified' });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Verification failed', message: (err as Error).message });
     }
+  };
+
+  // Sections that belong to the currently selected class.
+  const selectedClass = useMemo(
+    () => classes.find((c) => c.id === assignedClassId) || null,
+    [classes, assignedClassId],
+  );
+  const classOptions = useMemo(
+    () => [
+      { label: 'Select class...', value: '' },
+      ...classes.map((c) => ({ label: c.name, value: c.id })),
+    ],
+    [classes],
+  );
+  const sectionOptions = useMemo(
+    () => [
+      { label: selectedClass ? 'Select section...' : 'Pick a class first', value: '' },
+      ...(selectedClass?.sections ?? []).map((s) => ({ label: `Section ${s.name}`, value: s.id })),
+    ],
+    [selectedClass],
+  );
+
+  const openApproveForm = () => {
+    if (!selectedApp) return;
+    // Pre-select the class master whose name matches the captured `classApplied` (best-effort).
+    const classMatch = classes.find(
+      (c) => c.name.toLowerCase() === selectedApp.classApplied?.toLowerCase(),
+    );
+    setAssignedClassId(classMatch?.id ?? '');
+    setAssignedSectionId('');
+    // Pre-select a parent if their phone or email matches the application's text fields.
+    const phone = selectedApp.parentPhone?.trim();
+    const email = selectedApp.parentEmail?.trim().toLowerCase();
+    const parentMatch = parents.find((p) => {
+      const pPhone = p.user?.phoneNumber?.trim();
+      const pEmail = p.user?.email?.trim().toLowerCase();
+      return (phone && pPhone === phone) || (email && pEmail === email);
+    });
+    setAssignedParentId(parentMatch?.id ?? '');
+    setTransportRoute('');
+    setMedicalNotes('');
     setShowApproveForm(true);
   };
 
   const handleApprove = async () => {
     if (!selectedApp) return;
-    if (!assignedClass || !assignedSection) {
+    if (!assignedClassId || !assignedSectionId) {
       showToast({ type: 'error', title: 'Missing fields', message: 'Class and section are required' });
       return;
     }
     setSubmitting(true);
     try {
-      const updated = await approveApplication(selectedApp.id, { assignedClass, assignedSection });
-      const feeMsg = feePreview ? ` · Ledger initialized: ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(feePreview.totalAmount)}` : '';
+      const updated = await approveApplication(selectedApp.id, {
+        assignedClass: assignedClassId,
+        assignedSection: assignedSectionId,
+        parentId: assignedParentId || undefined,
+        transportRoute: transportRoute.trim() || undefined,
+        medicalNotes: medicalNotes.trim() || undefined,
+      });
+      const className = selectedClass?.name ?? 'class';
+      const sectionName = selectedClass?.sections.find((s) => s.id === assignedSectionId)?.name ?? '';
       showToast({
         type: 'success',
         title: 'Application approved',
-        message: `${updated.admissionNo} — ${updated.studentName} → ${updated.assignedClass}-${updated.assignedSection}${feeMsg}`,
+        message: `${updated.admissionNo} — ${updated.studentName} → ${className}${sectionName ? ` · ${sectionName}` : ''}`,
       });
       setShowApproveForm(false);
-      setFeePreview(null);
     } catch (err) {
       showToast({ type: 'error', title: 'Approval failed', message: (err as Error).message });
     } finally {
@@ -234,7 +321,7 @@ export default function ApplicationListPage() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
           <input
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, application no, parent..."
+            placeholder="Search by student or parent name..."
             className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
           />
           {search && (
@@ -247,8 +334,8 @@ export default function ApplicationListPage() {
 
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="grid grid-cols-[1.3fr_2.2fr_0.8fr_1.3fr_1.1fr_1.3fr_40px] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['App No.', 'Student', 'Class', 'Documents', 'Date', 'Status', ''].map((h) => (
+        <div className="grid grid-cols-[2.4fr_0.9fr_1.4fr_1.1fr_1.3fr_40px] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          {['Student', 'Class', 'Documents', 'Date', 'Status', ''].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
@@ -264,27 +351,33 @@ export default function ApplicationListPage() {
         ) : filtered.map((app, idx) => {
           const st = statusStyle[app.status];
           const initials = app.studentName.split(' ').map((n) => n[0]).join('');
-          const docPct = Math.round((app.documentsVerified / app.documentsCount) * 100);
+          // documentsCount=0 means docs haven't been fetched yet (lazy on drawer open).
+          const docsKnown = app.documentsCount > 0;
+          const docPct = docsKnown
+            ? Math.round((app.documentsVerified / app.documentsCount) * 100)
+            : 0;
           return (
             <div
               key={app.id}
               onClick={() => setSelectedId(app.id)}
               className={cn(
-                'grid grid-cols-[1.3fr_2.2fr_0.8fr_1.3fr_1.1fr_1.3fr_40px] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
+                'grid grid-cols-[2.4fr_0.9fr_1.4fr_1.1fr_1.3fr_40px] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
                 idx < filtered.length - 1 && 'border-b border-[var(--border-subtle)]',
                 selectedId === app.id && 'bg-[var(--card-bg-hover)]',
               )}
             >
-              {/* App No */}
-              <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide truncate">{app.applicationNo}</span>
-
               {/* Student */}
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0">
                   <span className="text-white text-[0.6875rem] font-bold">{initials}</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{app.studentName}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{app.studentName}</p>
+                    <span className="font-mono text-[0.625rem] font-semibold text-[var(--text-muted)] shrink-0">
+                      #{app.id.slice(0, 8).toUpperCase()}
+                    </span>
+                  </div>
                   <p className="text-[0.6875rem] text-[var(--text-muted)] truncate">{app.parentName}</p>
                 </div>
               </div>
@@ -294,19 +387,23 @@ export default function ApplicationListPage() {
                 Class {app.classApplied}
               </span>
 
-              {/* Documents progress */}
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-[5px] bg-[var(--border-subtle)] rounded-full overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all',
-                      docPct === 100 ? 'bg-emerald-500' : docPct > 50 ? 'bg-amber-400' : 'bg-blue-400')}
-                    style={{ width: `${docPct}%` }}
-                  />
+              {/* Documents progress (only shown after docs are fetched on drawer open) */}
+              {docsKnown ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-[5px] bg-[var(--border-subtle)] rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full rounded-full transition-all',
+                        docPct === 100 ? 'bg-emerald-500' : docPct > 50 ? 'bg-amber-400' : 'bg-blue-400')}
+                      style={{ width: `${docPct}%` }}
+                    />
+                  </div>
+                  <span className="text-[0.625rem] text-[var(--text-muted)] font-medium whitespace-nowrap">
+                    {app.documentsVerified}/{app.documentsCount}
+                  </span>
                 </div>
-                <span className="text-[0.625rem] text-[var(--text-muted)] font-medium whitespace-nowrap">
-                  {app.documentsVerified}/{app.documentsCount}
-                </span>
-              </div>
+              ) : (
+                <span className="text-[0.625rem] text-[var(--text-ghost)] italic">Open to view</span>
+              )}
 
               {/* Date */}
               <span className="text-[0.75rem] text-[var(--text-muted)]">{app.appliedDate}</span>
@@ -350,10 +447,14 @@ export default function ApplicationListPage() {
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-[0.9375rem] font-bold text-[var(--text-primary)] truncate">{selectedApp.studentName}</h2>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="text-[0.9375rem] font-bold text-[var(--text-primary)] truncate">{selectedApp.studentName}</h2>
+                    <span className="font-mono text-[0.6875rem] font-semibold text-[var(--text-muted)] shrink-0">
+                      #{selectedApp.id.slice(0, 8).toUpperCase()}
+                    </span>
+                  </div>
                   <p className="text-[0.6875rem] text-[var(--text-muted)] truncate">
-                    <span className="font-semibold text-[#002c98]">{selectedApp.applicationNo}</span>
-                    {' · '}Class {selectedApp.classApplied}
+                    Class {selectedApp.classApplied}
                     {selectedApp.admissionNo && ` · ${selectedApp.admissionNo}`}
                   </p>
                 </div>
@@ -391,41 +492,91 @@ export default function ApplicationListPage() {
                   {/* Approve form (inline) */}
                   {showApproveForm && (
                     <div className="space-y-4 mb-4">
+                      {/* Soft gate: no verified docs */}
+                      {selectedApp.documentsVerified === 0 && (
+                        <div className="rounded-lg bg-amber-50 p-3 border border-amber-200">
+                          <p className="text-[0.75rem] font-bold text-amber-900 mb-1">
+                            ⚠ No documents verified
+                          </p>
+                          <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
+                            {selectedApp.documentsCount === 0
+                              ? 'No documents uploaded yet. Approving creates the student without paperwork.'
+                              : `${selectedApp.documentsCount} uploaded but ${selectedApp.documentsVerified} verified. Verify above before approving — or proceed anyway.`}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-3">
-                        <Input
+                        <Select
                           label="Assign Class *"
-                          value={assignedClass}
-                          onChange={(e) => setAssignedClass(e.target.value)}
-                          placeholder="e.g. V"
+                          options={classOptions}
+                          value={assignedClassId}
+                          onChange={(e) => {
+                            setAssignedClassId(e.target.value);
+                            setAssignedSectionId('');
+                          }}
                         />
                         <Select
                           label="Section *"
                           options={sectionOptions}
-                          value={assignedSection}
-                          onChange={(e) => setAssignedSection(e.target.value)}
+                          value={assignedSectionId}
+                          onChange={(e) => setAssignedSectionId(e.target.value)}
+                          disabled={!assignedClassId}
                         />
                       </div>
-                      {/* Fee plan preview */}
-                      {feePreview ? (
-                        <div className="rounded-lg bg-emerald-50 p-3">
-                          <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Fee Plan (auto-assigned)</p>
-                          <div className="flex items-center justify-between">
-                            <p className="text-[0.75rem] font-semibold text-emerald-900">{feePreview.name}</p>
-                            <p className="font-display text-[0.875rem] font-extrabold text-emerald-800">
-                              {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(feePreview.totalAmount)}/yr
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
+                      {assignedClassId && (selectedClass?.sections.length ?? 0) === 0 && (
                         <div className="rounded-lg bg-amber-50 p-3">
                           <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
-                            No fee structure found for this class. Ledger will be empty until a structure is assigned.
+                            This class has no sections yet. Create one in Academic Setup first.
                           </p>
                         </div>
                       )}
+
+                      {/* Parent linkage — auto-matched by phone/email from the admission form.
+                          Read-only here; admin can change linkage later via Students edit. */}
+                      {(() => {
+                        const linkedParent = parents.find((p) => p.id === assignedParentId);
+                        return linkedParent ? (
+                          <div className="rounded-lg bg-emerald-50 p-3">
+                            <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-0.5">Parent linked</p>
+                            <p className="text-[0.75rem] font-semibold text-emerald-900">
+                              {linkedParent.user?.name ?? '—'}
+                              {linkedParent.user?.email ? ` · ${linkedParent.user.email}` : ''}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg bg-amber-50 p-3">
+                            <p className="text-[0.625rem] font-semibold text-amber-800 uppercase tracking-[0.06em] mb-0.5">No parent linked</p>
+                            <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
+                              No parent matched this application's phone or email. Student will be created without a parent link — fix from Students later.
+                            </p>
+                          </div>
+                        );
+                      })()}
+
+                      <Input
+                        label="Transport Route (optional)"
+                        value={transportRoute}
+                        onChange={(e) => setTransportRoute(e.target.value)}
+                        placeholder="e.g. Route 4 — Sector 12"
+                      />
+
+                      <div>
+                        <label className="block text-[0.6875rem] font-semibold text-[var(--text-tertiary)] mb-1.5">
+                          Medical Notes (optional)
+                        </label>
+                        <textarea
+                          value={medicalNotes}
+                          onChange={(e) => setMedicalNotes(e.target.value)}
+                          placeholder="Allergies, conditions, medication, etc."
+                          rows={2}
+                          className="w-full bg-[var(--card-bg)] rounded-lg px-3 py-2 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] resize-none"
+                        />
+                      </div>
+
                       <div className="rounded-lg bg-blue-50 p-3">
                         <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
-                          On approval: admission number generated, student profile created, ledger initialized{feePreview ? ` with ${feePreview.heads.length} fee heads` : ''}.
+                          On approval: admission number is generated, student profile is created, and the student is enrolled atomically by the backend. Optional fields above are applied with a follow-up update.
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -553,31 +704,106 @@ export default function ApplicationListPage() {
                     {selectedApp.documentsVerified}/{selectedApp.documentsCount} verified
                   </span>
                 </div>
-                <div className="space-y-1.5">
-                  {selectedApp.documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--card-bg-hover)]">
-                      <div className={cn('w-6 h-6 rounded flex items-center justify-center shrink-0',
-                        doc.status === 'verified' ? 'bg-emerald-100' : 'bg-slate-100')}>
-                        {doc.status === 'verified'
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />
-                          : <Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={2.5} />
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[0.8125rem] text-[var(--text-primary)] truncate">{doc.name}</p>
-                        {doc.uploadedAt && <p className="text-[0.625rem] text-[var(--text-muted)]">Uploaded {doc.uploadedAt}</p>}
-                      </div>
-                      {doc.status !== 'verified' && selectedApp.status !== 'approved' && selectedApp.status !== 'rejected' && (
+
+                {/* Upload control */}
+                {selectedApp.status !== 'approved' && selectedApp.status !== 'rejected' && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      hidden
+                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                    />
+
+                    {!uploadFormOpen ? (
+                      <button
+                        onClick={() => setUploadFormOpen(true)}
+                        className="w-full mb-3 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[#002c98] bg-blue-50 hover:bg-blue-100 transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload document
+                      </button>
+                    ) : (
+                      <div className="rounded-xl bg-[var(--card-bg-hover)] p-3 mb-3 space-y-2.5">
+                        <Select
+                          label="Document type *"
+                          options={documentTypeOptions}
+                          value={uploadType}
+                          onChange={(e) => setUploadType(e.target.value)}
+                          placeholder="Select type..."
+                        />
+                        {uploadType === 'other' && (
+                          <Input
+                            label="Custom type *"
+                            value={uploadCustomType}
+                            onChange={(e) => setUploadCustomType(e.target.value)}
+                            placeholder="e.g. Caste Certificate"
+                          />
+                        )}
                         <button
-                          onClick={() => handleUploadDoc(doc.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[0.625rem] font-semibold text-[#002c98] bg-blue-50 hover:bg-blue-100 transition-colors"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[0.75rem] font-medium text-[var(--text-tertiary)] bg-[var(--card-bg)] hover:bg-[var(--border-subtle)] transition-colors truncate"
                         >
-                          <Upload className="w-3 h-3" /> Upload
+                          <Upload className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{uploadFile ? uploadFile.name : 'Choose file'}</span>
                         </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button variant="tertiary" onClick={resetUploadForm} disabled={uploading}>Cancel</Button>
+                          <Button onClick={handleUpload} loading={uploading} disabled={!canUpload} className="flex-1">
+                            Upload
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedApp.documents.length === 0 ? (
+                  <p className="text-[0.75rem] text-[var(--text-muted)] py-2 text-center">
+                    No documents uploaded yet.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedApp.documents.map((doc) => (
+                      <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--card-bg-hover)]">
+                        <div className={cn('w-6 h-6 rounded flex items-center justify-center shrink-0',
+                          doc.isVerified ? 'bg-emerald-100' : 'bg-slate-100')}>
+                          {doc.isVerified
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />
+                            : <Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={2.5} />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">
+                            {formatDocumentTypeLabel(doc.type)}
+                          </p>
+                          <a
+                            href={doc.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[0.6875rem] text-[var(--text-muted)] truncate hover:underline inline-flex items-center gap-1"
+                          >
+                            {doc.fileName}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                          {doc.uploadedAt && (
+                            <p className="text-[0.625rem] text-[var(--text-ghost)]">
+                              Uploaded {doc.uploadedAt.split('T')[0]}
+                            </p>
+                          )}
+                        </div>
+                        {!doc.isVerified && selectedApp.status !== 'approved' && selectedApp.status !== 'rejected' && (
+                          <button
+                            onClick={() => handleVerifyDoc(doc.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[0.625rem] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Verify
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Remarks */}

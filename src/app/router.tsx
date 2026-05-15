@@ -93,6 +93,9 @@ export const router = createBrowserRouter([
               { path: 'teachers', element: lazyPage(() => import('@/modules/teachers/pages/TeacherListPage')) },
               { path: 'teachers/:id', element: lazyPage(() => import('@/modules/teachers/pages/TeacherProfilePage')) },
 
+              // Attendance (admin viewer — teachers mark via separate app)
+              { path: 'attendance', element: lazyPage(() => import('@/modules/attendance/pages/AttendanceListPage')) },
+
               // Parents
               { path: 'parents', element: lazyPage(() => import('@/modules/parents/pages/ParentListPage')) },
               { path: 'parents/:id', element: lazyPage(() => import('@/modules/parents/pages/ParentProfilePage')) },

@@ -2,6 +2,7 @@ import { api } from '@/services/api-client';
 import { USE_MOCK_API } from '@/mocks/mock-mode';
 import type {
   Application,
+  ApplicationDocument,
   ApplicationStatus,
 } from '@/types/admissions.types';
 
@@ -33,7 +34,8 @@ interface ApplicationDto {
   address: string | null;
   classApplied: string;
   academicYearId: string;
-  status: string; // Currently only "Pending"; future: UnderReview, Verified, Approved, Rejected
+  status: string;
+  rejectionReason?: string | null;
   documents: unknown | null;
   submittedAt: string | null;
   reviewedById: string | null;
@@ -41,14 +43,53 @@ interface ApplicationDto {
   updatedAt: string;
 }
 
-// Frontend statuses → backend (only Pending is supported today).
-// We default everything else to Pending on POST so writes don't fail.
+interface DocumentDto {
+  id: string;
+  schoolId: string;
+  studentId: string | null;
+  applicationId: string;
+  isVerified: boolean;
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Atomic approve response — backend creates Student + Enrollment in one call. */
+interface ApproveResponseDto {
+  application: ApplicationDto & {
+    academicYear?: unknown;
+    enquiry?: unknown;
+    student?: unknown;
+  };
+  student: {
+    id: string;
+    admissionNumber: string;
+    name: string;
+    enrollmentDate: string;
+    status: string;
+  };
+  enrollment: {
+    id: string;
+    classSectionId: string;
+    academicYearId: string;
+    studentId: string;
+    status: string;
+  };
+  admissionNumber: string;
+}
+
+// Frontend statuses → backend. POST/PUT use these labels directly.
+// (Workflow transitions go through dedicated start-review/verify/approve/reject endpoints,
+// not through PUT, so the only "writable" status on create is "Pending".)
 const STATUS_TO_API: Record<ApplicationStatus, string> = {
   submitted: 'Pending',
-  under_review: 'Pending',
-  verified: 'Pending',
-  approved: 'Pending',
-  rejected: 'Pending',
+  under_review: 'UnderReview',
+  verified: 'Verified',
+  approved: 'Approved',
+  rejected: 'Rejected',
 };
 
 const STATUS_FROM_API = (s: string): ApplicationStatus => {
@@ -70,13 +111,8 @@ const GENDER_TO_API = (g: 'male' | 'female' | 'other'): 'Male' | 'Female' | 'Oth
 
 // ─── Mappers ────────────────────────────────────────────────────
 function toApplication(dto: ApplicationDto): Application {
-  // Display-friendly application no: backend may not generate one yet,
-  // so fall back to first 8 chars of UUID.
-  const applicationNo = dto.applicationNumber ?? `APP-${dto.id.slice(0, 8).toUpperCase()}`;
-
   return {
     id: dto.id,
-    applicationNo,
     enquiryId: dto.enquiryId ?? undefined,
     studentName: dto.studentName,
     parentName: dto.parentName,
@@ -85,11 +121,23 @@ function toApplication(dto: ApplicationDto): Application {
     classApplied: dto.classApplied,
     appliedDate: (dto.submittedAt || dto.createdAt || '').split('T')[0],
     status: STATUS_FROM_API(dto.status),
+    rejectionReason: dto.rejectionReason ?? undefined,
 
-    // Frontend-only fields default to empty/undefined when fetched from backend.
+    // Documents are loaded lazily per-application by listDocuments.
     documents: [],
     documentsCount: 0,
     documentsVerified: 0,
+  };
+}
+
+function toDocument(dto: DocumentDto): ApplicationDocument {
+  return {
+    id: dto.id,
+    fileName: dto.fileName,
+    fileUrl: dto.fileUrl,
+    type: dto.type,
+    isVerified: dto.isVerified,
+    uploadedAt: dto.uploadedAt,
   };
 }
 
@@ -152,8 +200,7 @@ export const applicationsApi = {
         filtered = filtered.filter(
           (a) =>
             a.studentName.toLowerCase().includes(q) ||
-            a.parentName.toLowerCase().includes(q) ||
-            a.applicationNo.toLowerCase().includes(q),
+            a.parentName.toLowerCase().includes(q),
         );
       }
       if (params?.status) filtered = filtered.filter((a) => a.status === params.status);
@@ -197,7 +244,6 @@ export const applicationsApi = {
     if (USE_MOCK_API) {
       const application: Application = {
         id: crypto.randomUUID(),
-        applicationNo: `APP-${Date.now().toString().slice(-6)}`,
         enquiryId: body.enquiryId,
         studentName: body.studentName,
         parentName: body.parentName,
@@ -247,6 +293,129 @@ export const applicationsApi = {
       return;
     }
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/applications/${id}`);
+  },
+
+  // ─── Workflow transitions ────────────────────────────────────────
+
+  /** PATCH /schools/:schoolId/applications/:id/start-review — Submitted → UnderReview */
+  startReview: async (schoolId: string, id: string): Promise<Application> => {
+    const res = await api.patch<ApiEnvelope<ApplicationDto>>(
+      `/schools/${schoolId}/applications/${id}/start-review`,
+    );
+    return toApplication(res.data);
+  },
+
+  /** PATCH /schools/:schoolId/applications/:id/verify — UnderReview → Verified */
+  verify: async (schoolId: string, id: string): Promise<Application> => {
+    const res = await api.patch<ApiEnvelope<ApplicationDto>>(
+      `/schools/${schoolId}/applications/${id}/verify`,
+    );
+    return toApplication(res.data);
+  },
+
+  /**
+   * POST /schools/:schoolId/applications/:id/approve — Verified → Approved
+   * Atomic: creates Student, Enrollment, and admission number in one call.
+   * Body fields are UUIDs: `assignedClass` = classMasterId, `assignedSection` = classSectionId.
+   */
+  approve: async (
+    schoolId: string,
+    id: string,
+    body: { assignedClass: string; assignedSection: string },
+  ): Promise<Application> => {
+    const res = await api.post<ApiEnvelope<ApproveResponseDto>>(
+      `/schools/${schoolId}/applications/${id}/approve`,
+      body,
+    );
+    // Merge approve metadata onto the application so the UI gets admissionNo etc.
+    const app = toApplication(res.data.application);
+    app.admissionNo = res.data.admissionNumber;
+    app.assignedClass = body.assignedClass;
+    app.assignedSection = body.assignedSection;
+    app.createdStudentId = res.data.student.id;
+    return app;
+  },
+
+  /** POST /schools/:schoolId/applications/:id/reject — any → Rejected */
+  reject: async (
+    schoolId: string,
+    id: string,
+    reason: string,
+  ): Promise<Application> => {
+    const res = await api.post<ApiEnvelope<ApplicationDto>>(
+      `/schools/${schoolId}/applications/${id}/reject`,
+      { reason },
+    );
+    return toApplication(res.data);
+  },
+
+  // ─── Documents ───────────────────────────────────────────────────
+
+  /** GET /schools/:schoolId/applications/:id/documents */
+  listDocuments: async (
+    schoolId: string,
+    appId: string,
+  ): Promise<ApplicationDocument[]> => {
+    const res = await api.get<PaginatedEnvelope<DocumentDto>>(
+      `/schools/${schoolId}/applications/${appId}/documents?page=1&limit=100`,
+    );
+    return res.data.map(toDocument);
+  },
+
+  /**
+   * POST /schools/:schoolId/applications/:id/documents/upload (multipart)
+   * Uploads the raw file to S3 via the backend. Returns the storage key + a
+   * pre-signed URL. Caller must follow up with `createDocumentRecord` to
+   * persist the document row.
+   */
+  uploadDocumentFile: async (
+    schoolId: string,
+    appId: string,
+    file: File,
+  ): Promise<{ fileUrl: string; validUrl: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<ApiEnvelope<{ fileUrl: string; validUrl: string; fileName: string }>>(
+      `/schools/${schoolId}/applications/${appId}/documents/upload`,
+      fd,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /schools/:schoolId/applications/:id/documents
+   * Creates the persisted document record after a successful file upload.
+   */
+  createDocumentRecord: async (
+    schoolId: string,
+    appId: string,
+    body: { type: string; fileName: string; fileUrl: string; studentId?: string },
+  ): Promise<ApplicationDocument> => {
+    const res = await api.post<ApiEnvelope<DocumentDto>>(
+      `/schools/${schoolId}/applications/${appId}/documents`,
+      {
+        schoolId,
+        applicationId: appId,
+        type: body.type,
+        fileName: body.fileName,
+        fileUrl: body.fileUrl,
+        uploadedAt: new Date().toISOString(),
+        ...(body.studentId ? { studentId: body.studentId } : {}),
+      },
+    );
+    return toDocument(res.data);
+  },
+
+  /** PATCH /schools/:schoolId/applications/:id/documents/:docId/verify */
+  verifyDocument: async (
+    schoolId: string,
+    appId: string,
+    docId: string,
+  ): Promise<ApplicationDocument> => {
+    const res = await api.patch<ApiEnvelope<DocumentDto>>(
+      `/schools/${schoolId}/applications/${appId}/documents/${docId}/verify`,
+    );
+    return toDocument(res.data);
   },
 };
 

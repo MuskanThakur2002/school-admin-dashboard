@@ -1,56 +1,80 @@
 // ─── Fee Head ──────────────────────────────────────────────
-export type FeeCategory = 'tuition' | 'transport' | 'hostel' | 'exam' | 'activity' | 'lab' | 'library' | 'other';
-export type FeeFrequency = 'monthly' | 'quarterly' | 'half_yearly' | 'annual';
+// Backend shape: { id, schoolId, name, createdAt, updatedAt }
 
 export interface FeeHead {
   id: string;
+  schoolId: string;
   name: string;
-  code: string;
-  type: 'recurring' | 'one_time';
-  category: FeeCategory;
-  amount: number;
-  frequency?: FeeFrequency;
-  taxable: boolean;
-  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateFeeHeadDto {
   name: string;
-  code: string;
-  type: FeeHead['type'];
-  category: FeeCategory;
-  amount: number;
-  frequency?: FeeFrequency;
-  taxable: boolean;
+}
+
+export interface UpdateFeeHeadDto {
+  name: string;
 }
 
 // ─── Fee Structure ─────────────────────────────────────────
-export interface FeeStructureHead {
+// Backend shape: { id, schoolId, academicYearId, name, createdAt, updatedAt,
+//                  feeStructureItems: [...], feeInstallments: [...] }
+
+export interface FeeStructureItem {
+  id: string;
+  feeStructureId: string;
   feeHeadId: string;
-  feeHeadName: string;
-  amount: number;
+  // Decimal-as-string from the backend. Use Number(item.amount) for math.
+  amount: string;
+  createdAt: string;
+  updatedAt: string;
+  feeHead?: FeeHead;
+}
+
+export interface FeeInstallment {
+  id: string;
+  feeStructureId: string;
+  dueDate: string;
+  amount: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FeeStructure {
   id: string;
+  schoolId: string;
+  academicYearId: string;
   name: string;
-  academicYear: string;
-  classes: string[];
-  heads: FeeStructureHead[];
-  totalAmount: number;
-  studentCount: number;
-  status: 'active' | 'draft';
+  createdAt: string;
+  updatedAt: string;
+  feeStructureItems: FeeStructureItem[];
+  feeInstallments: FeeInstallment[];
 }
 
 export interface CreateFeeStructureDto {
+  academicYearId: string;
   name: string;
-  academicYear: string;
-  classes: string[];
-  headIds: string[];
-  status: 'active' | 'draft';
+}
+
+export interface UpdateFeeStructureDto {
+  academicYearId?: string;
+  name?: string;
+}
+
+export interface CreateFeeStructureItemDto {
+  feeStructureId: string;
+  feeHeadId: string;
+  amount: number;
+}
+
+export interface UpdateFeeStructureItemDto {
+  amount: number;
 }
 
 // ─── Installment Plan ──────────────────────────────────────
+// UI-only model used by the mock InstallmentPlanPage. Distinct from the
+// per-structure `FeeInstallment` rows that live on the backend.
 export interface Installment {
   id: string;
   label: string;
@@ -77,6 +101,7 @@ export interface CreateInstallmentPlanDto {
 }
 
 // ─── Concession ────────────────────────────────────────────
+// UI-only — backend models this as two scalars on FeeAssignment.
 export interface Concession {
   id: string;
   name: string;
@@ -97,6 +122,7 @@ export interface CreateConcessionDto {
 }
 
 // ─── Late Fee Rule ─────────────────────────────────────────
+// UI-only — no backend endpoint exists.
 export type PenaltyType = 'flat' | 'percentage' | 'per_day';
 
 export interface LateFeeRule {

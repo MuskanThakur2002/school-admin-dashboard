@@ -80,6 +80,8 @@ interface SettingsState {
   createRole: (r: { name: string; permissions: string[] }) => Promise<Role>;
   updateRole: (id: string, patch: { name: string; permissions: string[] }) => Promise<Role>;
   deleteRole: (id: string) => Promise<void>;
+  ensureParentRole: () => Promise<Role>;
+  ensureTeacherRole: () => Promise<Role>;
 
   // Holidays
   fetchHolidays: () => Promise<void>;
@@ -116,7 +118,7 @@ function resolveSchoolId(): string {
   return id;
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   roles: [], holidays: [], paymentModes: [], docTypes: [], grades: [], channels: [],
   loading: false,
 
@@ -150,6 +152,48 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const schoolId = resolveSchoolId();
     await rolesApi.remove(schoolId, id);
     set((s) => ({ roles: s.roles.filter((r) => r.id !== id) }));
+  },
+
+  ensureParentRole: async () => {
+    let { roles } = get();
+    if (roles.length === 0) {
+      await get().fetchRoles();
+      roles = get().roles;
+    }
+    const existing = roles.find((r) => r.name.trim().toLowerCase() === 'parent');
+    if (existing) return existing;
+    const schoolId = resolveSchoolId();
+    const created = await rolesApi.create(schoolId, {
+      name: 'Parent',
+      permissions: ['READ_STUDENT', 'READ_ATTENDANCE', 'READ_HOMEWORK', 'READ_MARKS'],
+    });
+    set((s) => ({ roles: [created, ...s.roles] }));
+    return created;
+  },
+
+  ensureTeacherRole: async () => {
+    let { roles } = get();
+    if (roles.length === 0) {
+      await get().fetchRoles();
+      roles = get().roles;
+    }
+    const existing = roles.find((r) => r.name.trim().toLowerCase() === 'teacher');
+    if (existing) return existing;
+    const schoolId = resolveSchoolId();
+    const created = await rolesApi.create(schoolId, {
+      name: 'Teacher',
+      permissions: [
+        'READ_STUDENT',
+        'MARK_ATTENDANCE',
+        'READ_ATTENDANCE',
+        'MANAGE_HOMEWORK',
+        'READ_HOMEWORK',
+        'MANAGE_MARKS',
+        'READ_MARKS',
+      ],
+    });
+    set((s) => ({ roles: [created, ...s.roles] }));
+    return created;
   },
 
   // Holidays

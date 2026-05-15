@@ -1,0 +1,102 @@
+@⁨Muskan⁩ 
+
+# Fee Management Documentation
+
+This document provides a comprehensive overview of the fee management system in the `qbitlog-school-management-backend`. It covers the database schema, relationships, and the API workflow for setting up and managing student fees.
+
+---
+
+## 1. Database Schema (Models)
+
+The fee management system is built around several interconnected tables. Below is the breakdown of each model:
+
+### Core Fee Definition
+*   **`FeeHead`**: Defines individual fee components (e.g., *Tuition Fee*, *Library Fee*, *Transportation Fee*).
+*   **`FeeStructure`**: A container that groups multiple fee heads and payment installments for a specific academic year (e.g., *Grade 10 Annual Fee Structure 2024*).
+
+### Structure Components
+*   **`FeeStructureItem`**: Links a `FeeHead` to a `FeeStructure` and specifies the **amount** for that component.
+*   **`FeeInstallment`**: Defines the **payment schedule** for a `FeeStructure`. Each installment has a due date and an amount.
+
+### Student Assignment
+*   **`FeeAssignment`**: The bridge between a `StudentEnrollment` and a `FeeStructure`. It tracks:
+    *   `concessionPercent`: Discount given to the student.
+    *   `scholarshipAmount`: Fixed reduction in total fees.
+
+### Financial Transactions
+*   **`LedgerEntry`**: The central record for all financial movements. Every fee demand or payment creates a ledger entry to maintain a running balance for the student.
+*   **`Payment`**: Records actual money received from a student. It is always linked to a `LedgerEntry`.
+
+---
+
+## 2. Relationships & Entity Graph
+
+As visualized via `/graphify`, the fee system revolves around the `FeeStructure` and `StudentEnrollment`.
+
+```mermaid
+graph TD
+    School --> FeeHead
+    School --> FeeStructure
+    AcademicYear --> FeeStructure
+    
+    FeeStructure --> FeeStructureItem
+    FeeHead --> FeeStructureItem
+    
+    FeeStructure --> FeeInstallment
+    
+    StudentEnrollment --> FeeAssignment
+    FeeStructure --> FeeAssignment
+    
+    StudentEnrollment --> LedgerEntry
+    LedgerEntry --> Payment
+```
+
+---
+
+## 3. API Usage Workflow
+
+To successfully implement fee management, APIs should be called in the following sequence:
+
+### Phase 1: Setup (Admin Only)
+1.  **Define Fee Heads**:
+    *   `POST /api/schools/:schoolId/fee-heads`
+    *   *Example:* `{ "name": "Tuition Fee" }`
+2.  **Create Fee Structure**:
+    *   `POST /api/schools/:schoolId/fee-structures`
+    *   *Example:* `{ "name": "Class 10 Standard", "academicYearId": "uuid" }`
+3.  **Add Items to Structure**:
+    *   `POST /api/schools/:schoolId/fee-structure-items`
+    *   *Example:* `{ "feeStructureId": "uuid", "feeHeadId": "uuid", "amount": 50000 }`
+4.  **Define Installments**:
+    *   `POST /api/schools/:schoolId/fee-installments`
+    *   *Example:* `{ "feeStructureId": "uuid", "dueDate": "2024-06-15", "amount": 25000 }`
+
+### Phase 2: Assignment
+5.  **Assign Fee to Student**:
+    *   `POST /api/schools/:schoolId/fee-assignments`
+    *   *Example:* `{ "studentEnrollmentId": "uuid", "feeStructureId": "uuid", "concessionPercent": 10 }`
+
+### Phase 3: Collection & Ledger
+6.  **Record a Payment**:
+    *   `POST /api/schools/:schoolId/payments`
+    *   *Example:* `{ "studentEnrollmentId": "uuid", "amount": 10000, "paymentMode": "CASH", "status": "COMPLETED" }`
+7.  **View Student Ledger**:
+    *   `GET /api/schools/:schoolId/ledgers?studentEnrollmentId=uuid`
+
+---
+
+## 4. Permissions
+
+Access to these APIs is governed by specific permissions defined in `src/constants/permissions.ts`:
+
+| Feature | Permission Required |
+| :--- | :--- |
+| **Fee Setup** | `MANAGE_FEE_STRUCTURES` |
+| **Assigning Fees** | `MANAGE_FEE_ASSIGNMENTS` |
+| **Collecting Payments** | `COLLECT_FEES` |
+| **Viewing Ledgers** | `MANAGE_LEDGER` |
+
+---
+
+## Summary
+The fee management system ensures strict consistency between academic structures and financial records. By linking structures to students via assignments and tracking every movement in the ledger, the system provides a robust audit trail for all school finances.

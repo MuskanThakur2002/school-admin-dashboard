@@ -134,3 +134,29 @@ export const stateOptions: FilterOption[] = [
   { label: 'Lakshadweep', value: 'Lakshadweep' },
   { label: 'Puducherry', value: 'Puducherry' },
 ];
+
+// ─── Application document categories ──────────────────────────────
+// `value` is what we POST as `type` to the backend; `label` is what we render.
+// Pick "other" to type a custom value.
+export const documentTypeOptions = [
+  { label: 'Aadhar Card', value: 'aadhar' },
+  { label: 'PAN Card', value: 'pan' },
+  { label: 'Birth Certificate', value: 'birth_certificate' },
+  { label: 'Transfer Certificate (TC)', value: 'transfer_certificate' },
+  { label: 'Address Proof', value: 'address_proof' },
+  { label: 'Photo', value: 'photo' },
+  { label: 'Medical Certificate', value: 'medical_certificate' },
+  { label: 'Previous Marksheet', value: 'previous_marksheet' },
+  { label: 'Other', value: 'other' },
+];
+
+/** Friendly label for a document `type` string. Falls back to title-casing the slug. */
+export function formatDocumentTypeLabel(type: string): string {
+  const known = documentTypeOptions.find((o) => o.value === type);
+  if (known) return known.label;
+  if (!type) return 'Document';
+  return type
+    .split(/[_\s-]+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ''))
+    .join(' ');
+}

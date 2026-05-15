@@ -1,14 +1,17 @@
 import { create } from 'zustand';
-import { admissionsApi } from '@/services/modules/admissions.api';
 import { enquiriesApi } from '@/services/modules/enquiries.api';
 import { applicationsApi, toApiGender } from '@/services/modules/applications.api';
+import { studentsApi } from '@/services/modules/students.api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useStudentsStore } from '@/stores/students.store';
+import { useUIStore } from '@/stores/ui.store';
 import { isSuperAdmin } from '@/types/auth.types';
 import type {
   Enquiry,
   Application,
-  CreateEnquiryDto,
+  ApplicationDocument,
   ApproveApplicationDto,
+  CreateEnquiryDto,
   EnquiryStatus,
   NewAdmissionDto,
 } from '@/types/admissions.types';
@@ -31,10 +34,13 @@ interface AdmissionsState {
   // Data
   enquiries: Enquiry[];
   applications: Application[];
+  /** Per-application document lists, keyed by applicationId. */
+  documentsByApp: Record<string, ApplicationDocument[]>;
 
   // Loading flags
   enquiriesLoading: boolean;
   applicationsLoading: boolean;
+  documentsLoading: boolean;
 
   // Error
   error: string | null;
@@ -51,19 +57,45 @@ interface AdmissionsState {
 
   // ─── Application actions ──────────────────────
   createApplication: (dto: NewAdmissionDto, academicYearId: string) => Promise<Application>;
+  /** Advance from submitted → under_review → verified by calling the right endpoint for the current status. */
   advanceApplicationStatus: (id: string) => Promise<void>;
-  uploadDocument: (appId: string, docId: string, filename: string) => Promise<void>;
 
   // ─── Approval actions ─────────────────────────
   approveApplication: (id: string, dto: ApproveApplicationDto) => Promise<Application>;
   rejectApplication: (id: string, reason: string) => Promise<void>;
+
+  // ─── Documents ────────────────────────────────
+  fetchApplicationDocuments: (appId: string) => Promise<void>;
+  /**
+   * Upload a file and persist a document record. `type` is the document category
+   * (e.g. "aadhar", "pan", "birth_certificate") — see documentTypeOptions.
+   */
+  uploadApplicationDocument: (appId: string, file: File, type: string) => Promise<void>;
+  verifyApplicationDocument: (appId: string, docId: string) => Promise<void>;
 }
 
-export const useAdmissionsStore = create<AdmissionsState>((set) => ({
+/** Merge document counts onto an application so the table progress bar reflects the loaded docs. */
+function withDocCounts(app: Application, docs: ApplicationDocument[]): Application {
+  return {
+    ...app,
+    documents: docs,
+    documentsCount: docs.length,
+    documentsVerified: docs.filter((d) => d.isVerified).length,
+  };
+}
+
+/** Normalize a free-text doc category to a slug. */
+function normalizeDocType(type: string): string {
+  return type.trim().toLowerCase().replace(/\s+/g, '_') || 'other';
+}
+
+export const useAdmissionsStore = create<AdmissionsState>((set, get) => ({
   enquiries: [],
   applications: [],
+  documentsByApp: {},
   enquiriesLoading: false,
   applicationsLoading: false,
+  documentsLoading: false,
   error: null,
 
   // ─── Fetch ────────────────────────────────────
@@ -103,7 +135,7 @@ export const useAdmissionsStore = create<AdmissionsState>((set) => ({
 
   updateEnquiryStatus: async (id, status) => {
     const schoolId = resolveSchoolId();
-    const current = useAdmissionsStore.getState().enquiries.find((e) => e.id === id);
+    const current = get().enquiries.find((e) => e.id === id);
     if (!current) throw new Error('Enquiry not found');
     const updated = await enquiriesApi.update(schoolId, id, {
       studentName: current.studentName,
@@ -128,10 +160,9 @@ export const useAdmissionsStore = create<AdmissionsState>((set) => ({
 
   convertEnquiryToApplication: async (enquiryId, extras) => {
     const schoolId = resolveSchoolId();
-    const enquiry = useAdmissionsStore.getState().enquiries.find((e) => e.id === enquiryId);
+    const enquiry = get().enquiries.find((e) => e.id === enquiryId);
     if (!enquiry) throw new Error('Enquiry not found');
 
-    // 1. Create the application on the real backend (requires DOB/gender/AY).
     const app = await applicationsApi.create(schoolId, {
       enquiryId: enquiry.id,
       studentName: enquiry.studentName,
@@ -145,7 +176,6 @@ export const useAdmissionsStore = create<AdmissionsState>((set) => ({
       status: 'Pending',
     });
 
-    // 2. Mark the originating enquiry as converted.
     const converted = await enquiriesApi.update(schoolId, enquiryId, {
       studentName: enquiry.studentName,
       parentName: enquiry.parentName,
@@ -167,52 +197,130 @@ export const useAdmissionsStore = create<AdmissionsState>((set) => ({
   // ─── Applications ─────────────────────────────
   createApplication: async (dto, academicYearId) => {
     const schoolId = resolveSchoolId();
-    const primaryParent = dto.parents[0];
-    const fullName = `${dto.applicant.firstName} ${dto.applicant.lastName}`.trim();
+    const fullName = `${dto.firstName} ${dto.lastName}`.trim();
     const created = await applicationsApi.create(schoolId, {
       studentName: fullName,
-      dateOfBirth: dto.applicant.dateOfBirth,
-      gender: toApiGender(dto.applicant.gender),
-      parentName: primaryParent?.name || '',
-      phoneNumber: primaryParent?.phone || '',
-      email: primaryParent?.email || '',
+      dateOfBirth: dto.dateOfBirth,
+      gender: toApiGender(dto.gender),
+      parentName: dto.parentName,
+      phoneNumber: dto.parentPhone,
+      email: dto.parentEmail || '',
       classApplied: dto.classApplied,
       academicYearId,
       status: 'Pending',
-      address: dto.address?.line1 || undefined,
+      address: dto.address || undefined,
     });
     set((state) => ({ applications: [created, ...state.applications] }));
     return created;
   },
 
   advanceApplicationStatus: async (id) => {
-    const updated = await admissionsApi.advanceApplicationStatus(id);
-    set((state) => ({
-      applications: state.applications.map((a) => (a.id === id ? updated : a)),
-    }));
-  },
+    const schoolId = resolveSchoolId();
+    const current = get().applications.find((a) => a.id === id);
+    if (!current) throw new Error('Application not found');
 
-  uploadDocument: async (appId, docId, filename) => {
-    const updated = await admissionsApi.uploadDocument(appId, docId, filename);
+    let updated: Application;
+    if (current.status === 'submitted') {
+      updated = await applicationsApi.startReview(schoolId, id);
+    } else if (current.status === 'under_review') {
+      updated = await applicationsApi.verify(schoolId, id);
+    } else {
+      throw new Error(`Cannot advance from status: ${current.status}`);
+    }
+
     set((state) => ({
-      applications: state.applications.map((a) => (a.id === appId ? updated : a)),
+      applications: state.applications.map((a) =>
+        a.id === id ? withDocCounts(updated, state.documentsByApp[id] ?? []) : a,
+      ),
     }));
   },
 
   // ─── Approvals ────────────────────────────────
   approveApplication: async (id, dto) => {
-    const updated = await admissionsApi.approveApplication(id, dto);
+    const schoolId = resolveSchoolId();
+    const updated = await applicationsApi.approve(schoolId, id, {
+      assignedClass: dto.assignedClass,
+      assignedSection: dto.assignedSection,
+    });
+
+    // Backfill student-level fields the approve endpoint doesn't accept.
+    // These come from the same approve modal so we apply them atomically from the
+    // user's perspective, but the backend needs two calls.
+    const studentId = updated.createdStudentId;
+    const hasBackfill = studentId && (dto.parentId || dto.transportRoute || dto.medicalNotes);
+    if (hasBackfill) {
+      try {
+        await studentsApi.update(schoolId, studentId!, {
+          ...(dto.parentId ? { parentId: dto.parentId } : {}),
+          ...(dto.transportRoute ? { transportRoute: dto.transportRoute } : {}),
+          ...(dto.medicalNotes ? { medicalNotes: dto.medicalNotes } : {}),
+        });
+      } catch (err) {
+        // Approve already succeeded — don't fail the whole flow, but surface the warning.
+        useUIStore.getState().showToast({
+          type: 'error',
+          title: 'Student created, but extra fields failed to save',
+          message: (err as Error).message,
+        });
+      }
+    }
+
     set((state) => ({
-      applications: state.applications.map((a) => (a.id === id ? updated : a)),
+      applications: state.applications.map((a) =>
+        a.id === id ? withDocCounts(updated, state.documentsByApp[id] ?? []) : a,
+      ),
     }));
+    // Surface the newly-created student in the Students module without a manual refresh.
+    useStudentsStore.getState().fetchStudents().catch(() => {});
     return updated;
   },
 
   rejectApplication: async (id, reason) => {
-    const updated = await admissionsApi.rejectApplication(id, reason);
+    const schoolId = resolveSchoolId();
+    const updated = await applicationsApi.reject(schoolId, id, reason);
     set((state) => ({
-      applications: state.applications.map((a) => (a.id === id ? updated : a)),
+      applications: state.applications.map((a) =>
+        a.id === id ? withDocCounts(updated, state.documentsByApp[id] ?? []) : a,
+      ),
     }));
+  },
+
+  // ─── Documents ────────────────────────────────
+  fetchApplicationDocuments: async (appId) => {
+    const schoolId = resolveSchoolId();
+    set({ documentsLoading: true });
+    try {
+      const docs = await applicationsApi.listDocuments(schoolId, appId);
+      set((state) => ({
+        documentsByApp: { ...state.documentsByApp, [appId]: docs },
+        applications: state.applications.map((a) =>
+          a.id === appId ? withDocCounts(a, docs) : a,
+        ),
+        documentsLoading: false,
+      }));
+    } catch (err) {
+      set({ error: (err as Error).message, documentsLoading: false });
+    }
+  },
+
+  uploadApplicationDocument: async (appId, file, type) => {
+    const schoolId = resolveSchoolId();
+    // 1. Upload the file (multipart) and get the storage key back.
+    const { fileUrl, fileName } = await applicationsApi.uploadDocumentFile(schoolId, appId, file);
+    // 2. Persist the document record with the admin-chosen category.
+    await applicationsApi.createDocumentRecord(schoolId, appId, {
+      type: normalizeDocType(type),
+      fileName,
+      fileUrl,
+    });
+    // 3. Reload the list so the new doc appears with a fresh signed URL.
+    await get().fetchApplicationDocuments(appId);
+  },
+
+  verifyApplicationDocument: async (appId, docId) => {
+    const schoolId = resolveSchoolId();
+    await applicationsApi.verifyDocument(schoolId, appId, docId);
+    await get().fetchApplicationDocuments(appId);
   },
 }));
 

@@ -34,7 +34,6 @@ export default function AcademicHubPage() {
     () => classes.reduce((sum, c) => sum + c.sections.reduce((s, sec) => s + sec.studentCount, 0), 0),
     [classes],
   );
-  const coreSubjects = useMemo(() => subjects.filter((s) => s.type === 'core').length, [subjects]);
 
   return (
     <div className="max-w-[1280px]">
@@ -149,15 +148,11 @@ export default function AcademicHubPage() {
             <ArrowRight className="w-4 h-4 text-[var(--text-ghost)] group-hover:text-[#002c98] group-hover:translate-x-0.5 transition-all" />
           </div>
           <h3 className="text-[0.9375rem] font-bold text-[var(--text-primary)] mb-1">Subjects</h3>
-          <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Define subjects and assign them to classes.</p>
+          <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Define the subjects offered at your school.</p>
           <div className="flex items-center gap-4 pt-3 border-t border-[var(--border-subtle)]">
             <div>
               <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{subjects.length}</p>
               <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Total</p>
-            </div>
-            <div>
-              <p className="font-display text-[1.25rem] font-extrabold text-violet-600 leading-none">{coreSubjects}</p>
-              <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Core</p>
             </div>
           </div>
         </button>

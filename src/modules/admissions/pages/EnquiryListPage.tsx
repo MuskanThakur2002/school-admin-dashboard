@@ -166,7 +166,7 @@ export default function EnquiryListPage() {
         gender: convertGender,
         academicYearId: convertYearId,
       });
-      showToast({ type: 'success', title: 'Converted to application', message: `${app.applicationNo} created` });
+      showToast({ type: 'success', title: 'Converted to application', message: `${app.studentName} — awaiting verification` });
       setConvertOpen(false);
       setDetailOpen(false);
     } catch (err) {

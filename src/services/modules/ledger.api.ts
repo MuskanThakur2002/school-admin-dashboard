@@ -9,8 +9,6 @@ import type {
   InitializeLedgerDto,
   RefundDto,
 } from '@/types/ledger.types';
-import { feeApi } from './fee.api';
-
 const D = 150;
 const delay = <T>(data: T): Promise<T> => new Promise((r) => setTimeout(() => r(data), D));
 
@@ -290,52 +288,11 @@ export const ledgerApi = {
     return delay(entry);
   },
 
-  /**
-   * Initialize a student's ledger from their fee structure.
-   * Creates debit entries for each fee head with today's date.
-   */
-  initializeLedger: async (dto: InitializeLedgerDto): Promise<LedgerEntry[]> => {
-    const structures = await feeApi.getStructures();
-    const feeStructure = structures.find((s) => s.id === dto.feeStructureId);
-    if (!feeStructure) return [];
-
-    const today = new Date().toISOString().split('T')[0];
-    const created: LedgerEntry[] = [];
-
-    for (const head of feeStructure.heads) {
-      const categoryMap: Record<string, LedgerEntry['category']> = {
-        'Tuition Fee': 'tuition',
-        'Annual Development Fund': 'tuition',
-        'Transport Fee': 'transport',
-        'Computer Lab Fee': 'lab',
-        'Exam Fee': 'exam',
-        'Library Fee': 'library',
-        'Sports & Activities': 'activity',
-        'Hostel Fee': 'hostel',
-        'Smart Class Fee': 'other',
-        'Uniform & Books': 'other',
-      };
-
-      const entry: LedgerEntry = {
-        id: nextId(),
-        studentId: dto.studentId,
-        date: today,
-        description: head.feeHeadName,
-        type: 'debit',
-        category: categoryMap[head.feeHeadName] || 'other',
-        amount: head.amount,
-        balance: 0,
-        createdBy: 'system',
-      };
-      entriesDb.push(entry);
-      created.push(entry);
-    }
-
-    recalcBalances(dto.studentId);
-
-    // Update local studentInfo cache for newly admitted students
-    // (The real backend wouldn't need this — it would query the students table)
-    return delay(created.map((e) => ({ ...e, balance: entriesDb.find((x) => x.id === e.id)!.balance })));
+  // TODO Phase 2: re-implement once fee-assignments + ledger backend wiring lands.
+  // Old impl depended on FeeStructure.heads[] which no longer exists after the
+  // fee-engine reshape (Phase 1A). Returns [] so callers safely no-op.
+  initializeLedger: async (_dto: InitializeLedgerDto): Promise<LedgerEntry[]> => {
+    return delay([]);
   },
 
   /** Get balance summary for a student. */

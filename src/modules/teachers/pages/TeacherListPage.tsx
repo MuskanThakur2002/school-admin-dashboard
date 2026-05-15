@@ -6,11 +6,9 @@ import {
 import { cn } from '@/utils/cn';
 import { useTeacherStore, type CreateTeacherFlowDto } from '@/stores/teacher.store';
 import type { Teacher } from '@/types/teacher.types';
-import { useSettingsStore } from '@/stores/settings.store';
 import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
-import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 
 export default function TeacherListPage() {
@@ -22,8 +20,6 @@ export default function TeacherListPage() {
   const createTeacher = useTeacherStore((s) => s.createTeacher);
   const deleteTeacher = useTeacherStore((s) => s.deleteTeacher);
 
-  const roles = useSettingsStore((s) => s.roles);
-  const fetchRoles = useSettingsStore((s) => s.fetchRoles);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
@@ -43,11 +39,6 @@ export default function TeacherListPage() {
       return name.includes(q) || email.includes(q) || empId.includes(q);
     });
   }, [teachers, search]);
-
-  const openModal = () => {
-    setModalOpen(true);
-    if (roles.length === 0) fetchRoles();
-  };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -75,7 +66,7 @@ export default function TeacherListPage() {
             Export
           </button>
           <button
-            onClick={openModal}
+            onClick={() => setModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -206,7 +197,6 @@ export default function TeacherListPage() {
       <AddTeacherModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        roles={roles}
         onCreate={createTeacher}
         onSuccess={(name) => showToast({ type: 'success', title: 'Teacher added', message: name })}
         onError={(message) => showToast({ type: 'error', title: 'Failed to add teacher', message })}
@@ -220,13 +210,12 @@ export default function TeacherListPage() {
 interface AddTeacherModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  roles: { id: string; name: string }[];
   onCreate: (input: CreateTeacherFlowDto) => Promise<Teacher>;
   onSuccess: (name: string) => void;
   onError: (message: string) => void;
 }
 
-function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onError }: AddTeacherModalProps) {
+function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: AddTeacherModalProps) {
   const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({
     name: '',
@@ -235,7 +224,6 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
     phoneNumber: '',
     address: '',
     whatsapp: '',
-    roleId: '',
     employeeId: '',
     hireDate: today,
   });
@@ -243,7 +231,7 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
 
   const reset = () => setForm({
     name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
-    roleId: '', employeeId: '', hireDate: today,
+    employeeId: '', hireDate: today,
   });
 
   const handleClose = (next: boolean) => {
@@ -258,7 +246,6 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
     form.name.trim() &&
     form.email.trim() &&
     form.password.trim() &&
-    form.roleId &&
     form.employeeId.trim() &&
     form.hireDate;
 
@@ -274,7 +261,6 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
           phoneNumber: form.phoneNumber.trim() || undefined,
           address: form.address.trim() || undefined,
           whatsapp: form.whatsapp.trim() || undefined,
-          roleId: form.roleId,
           isActive: true,
         },
         teacher: {
@@ -290,8 +276,6 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
       setSaving(false);
     }
   };
-
-  const roleOptions = roles.map((r) => ({ label: r.name, value: r.id }));
 
   return (
     <Modal
@@ -316,13 +300,6 @@ function AddTeacherModal({ open, onOpenChange, roles, onCreate, onSuccess, onErr
             <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Pramod Kumar" />
             <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="teacher@school.edu" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
-            <Select
-              label="Role *"
-              value={form.roleId}
-              onChange={(e) => update('roleId', e.target.value)}
-              options={roleOptions}
-              placeholder={roles.length === 0 ? 'Loading roles...' : 'Select a role'}
-            />
             <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9311314401" />
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9311314401" />
             <div className="md:col-span-2">

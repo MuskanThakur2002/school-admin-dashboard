@@ -6,11 +6,9 @@ import {
 import { cn } from '@/utils/cn';
 import { useParentStore, type CreateParentFlowDto } from '@/stores/parent.store';
 import type { Parent } from '@/types/parent.types';
-import { useSettingsStore } from '@/stores/settings.store';
 import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
-import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 
 function formatIncome(value: number): string {
@@ -31,8 +29,6 @@ export default function ParentListPage() {
   const createParent = useParentStore((s) => s.createParent);
   const deleteParent = useParentStore((s) => s.deleteParent);
 
-  const roles = useSettingsStore((s) => s.roles);
-  const fetchRoles = useSettingsStore((s) => s.fetchRoles);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
@@ -52,11 +48,6 @@ export default function ParentListPage() {
       return name.includes(q) || email.includes(q) || phone.includes(q);
     });
   }, [parents, search]);
-
-  const openModal = () => {
-    setModalOpen(true);
-    if (roles.length === 0) fetchRoles();
-  };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -84,7 +75,7 @@ export default function ParentListPage() {
             Export
           </button>
           <button
-            onClick={openModal}
+            onClick={() => setModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -213,7 +204,6 @@ export default function ParentListPage() {
       <AddParentModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        roles={roles}
         onCreate={createParent}
         onSuccess={(name) => showToast({ type: 'success', title: 'Parent added', message: name })}
         onError={(message) => showToast({ type: 'error', title: 'Failed to add parent', message })}
@@ -227,13 +217,12 @@ export default function ParentListPage() {
 interface AddParentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  roles: { id: string; name: string }[];
   onCreate: (input: CreateParentFlowDto) => Promise<Parent>;
   onSuccess: (name: string) => void;
   onError: (message: string) => void;
 }
 
-function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onError }: AddParentModalProps) {
+function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: AddParentModalProps) {
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -241,14 +230,13 @@ function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onErro
     phoneNumber: '',
     address: '',
     whatsapp: '',
-    roleId: '',
     annualIncome: '',
   });
   const [saving, setSaving] = useState(false);
 
   const reset = () => setForm({
     name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
-    roleId: '', annualIncome: '',
+    annualIncome: '',
   });
 
   const handleClose = (next: boolean) => {
@@ -266,7 +254,6 @@ function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onErro
     form.name.trim() &&
     form.email.trim() &&
     form.password.trim() &&
-    form.roleId &&
     incomeValid;
 
   const handleSubmit = async () => {
@@ -281,7 +268,6 @@ function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onErro
           phoneNumber: form.phoneNumber.trim() || undefined,
           address: form.address.trim() || undefined,
           whatsapp: form.whatsapp.trim() || undefined,
-          roleId: form.roleId,
           isActive: true,
         },
         parent: {
@@ -296,8 +282,6 @@ function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onErro
       setSaving(false);
     }
   };
-
-  const roleOptions = roles.map((r) => ({ label: r.name, value: r.id }));
 
   return (
     <Modal
@@ -322,13 +306,6 @@ function AddParentModal({ open, onOpenChange, roles, onCreate, onSuccess, onErro
             <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Rajesh Patel" />
             <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="parent@example.com" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
-            <Select
-              label="Role *"
-              value={form.roleId}
-              onChange={(e) => update('roleId', e.target.value)}
-              options={roleOptions}
-              placeholder={roles.length === 0 ? 'Loading roles...' : 'Select a role'}
-            />
             <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9876543210" />
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9876543210" />
             <div className="md:col-span-2">

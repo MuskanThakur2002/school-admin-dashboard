@@ -5,7 +5,7 @@
 import { ledgerApi } from './ledger.api';
 import { receiptApi } from './receipt.api';
 import { expenseApi } from './expense.api';
-import { admissionsApi } from './admissions.api';
+import { applicationsApi } from './applications.api';
 import { enquiriesApi } from './enquiries.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { isSuperAdmin } from '@/types/auth.types';
@@ -263,13 +263,16 @@ async function admissionReport(): Promise<ReportResult> {
   const { user, activeSchoolId } = useAuthStore.getState();
   const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
 
-  const [enquiriesRes, applications] = await Promise.all([
+  const [enquiriesRes, applicationsRes] = await Promise.all([
     schoolId
       ? enquiriesApi.list(schoolId, { page: 1, limit: 1000 })
       : Promise.resolve({ data: [] as Enquiry[], total: 0, page: 1, limit: 0 }),
-    admissionsApi.getApplications(),
+    schoolId
+      ? applicationsApi.list(schoolId, { page: 1, limit: 1000 })
+      : Promise.resolve({ data: [] as Application[], total: 0, page: 1, limit: 0 }),
   ]);
   const enquiries = enquiriesRes.data;
+  const applications = applicationsRes.data;
 
   const statusCounts = { new: 0, contacted: 0, converted: 0, lost: 0 };
   for (const e of enquiries) statusCounts[e.status]++;

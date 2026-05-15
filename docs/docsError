@@ -1,0 +1,32 @@
+1. NewAdmissionPage captures rich data that gets dropped on POST 🟥
+The 4-step form collects a lot that the backend never sees:
+
+bloodGroup, religion, category, motherTongue
+Multiple parents[] with relation, occupation, annualIncome
+Structured address (line1, line2, city, state, pincode)
+previousSchool, remarks
+The store's createApplication only forwards the flat fields. Backend's POST /applications doesn't accept the rest. User fills 4 steps, hits Submit, ~70% of the data evaporates silently. Either trim the form or push backend to accept the extras.
+
+2. Approve doesn't gate on document verification 🟧
+UI lets you approve an application that has zero documents uploaded or zero verified. The backend enforces "must be Verified status" but not "docs must exist." Per the original gap doc this was supposed to be a hard block.
+
+Quick fix: in the approve handlers, check selectedApp.documentsCount === selectedApp.documentsVerified && selectedApp.documentsCount > 0. If false, show a confirmation modal "Approve without verified documents?" or block entirely.
+
+3. Mock fee preview misleads in NewAdmissionPage review 🟧
+NewAdmissionPage.tsx:608-617 shows "Fee Plan (auto-assigned on approval) — ₹X/year" sourced from useFeeStore.getStructureForClass, which is the mock fee store keyed by free-text class name. The real ledger initialization happens atomically server-side on approve — this preview number is fiction. Either delete the preview or wire it to a real fee structure API.
+
+4. Frontend doesn't pre-validate email 🟨
+We hit this in the smoke test (backend rejected .invalid TLD). The enquiry, new-admission, and convert forms accept any string and let backend explode with a generic "Validation failed." 5-minute fix: use type="email" inputs + a simple regex guard before POST.
+
+5. applicationNumber falls back to fake UUID slice 🟨
+Backend returns applicationNumber: null or applicationNumber: "string". Frontend invents APP-XXXXXXXX from the UUID (applications.api.ts:75). Two applications can show the same fake number if their UUIDs collide in first 8 chars (rare). The proper fix is backend-side auto-numbering.
+
+6. Gap doc is stale 🟦
+admissions-api-integration.md still says "Total: Available 5, Missing 11" and lists workflow/docs/approve as missing. They're all wired now. Either delete the doc or refresh it.
+
+7. Path 2 (direct New Admission) bypasses enquiry 🟦
+You already saw this and said "leave it." Flagging again as a known gap: direct admissions create applications with enquiryId: null. If the rule is really "enquiry before admission," Path 2 should auto-create a backing enquiry or be removed.
+
+8. No "Children" card on Parent profile / no "Siblings" card on Student profile 🟦
+Now that siblings are derived from shared parentId, the parent profile could list GET /students?parentId=X — but neither the endpoint param nor the UI exists. Future work.
+
