@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, HeartHandshake, Wallet, BookOpen,
-  Receipt, CreditCard, Bell, BarChart3, Building2, Settings, ClipboardCheck,
-  ChevronLeft, ChevronRight, Sparkles,
+  Receipt, CreditCard, Bell, BarChart3, Building2, Settings, ClipboardCheck, ClipboardList,
+  NotebookPen, ChevronLeft, ChevronRight, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
@@ -17,6 +17,9 @@ interface NavItem {
   icon: React.ElementType;
   permission?: string;
   superAdminOnly?: boolean;
+  // If true, only highlights on exact path match (no prefix). Use for parent
+  // entries that have more-specific sibling routes in the sidebar.
+  end?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -26,8 +29,10 @@ const navItems: NavItem[] = [
   { label: 'Students', path: '/students', icon: Users, permission: 'students.read' },
   { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
   { label: 'Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
+  { label: 'Homework', path: '/homework', icon: NotebookPen, permission: 'homework.read' },
   { label: 'Parents', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
-  { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read' },
+  { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read', end: true },
+  { label: 'Fee Assignments', path: '/fees/assignments', icon: ClipboardList, permission: 'fees.read' },
   { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },
   { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: 'expenses.read' },
   { label: 'Receipts', path: '/receipts', icon: Receipt, permission: 'receipts.read' },
@@ -54,7 +59,7 @@ function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
   return (
     <NavLink
       to={item.path}
-      end={false}
+      end={item.end ?? false}
       className={({ isActive }) =>
         cn(
           'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',

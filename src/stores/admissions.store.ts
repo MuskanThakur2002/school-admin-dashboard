@@ -30,24 +30,54 @@ function resolveSchoolId(): string {
   return id;
 }
 
+/** Pipeline counts shown on the AdmissionsHub. Each is a server-side total per status. */
+export interface ApplicationStats {
+  submitted: number;
+  under_review: number;
+  verified: number;
+  approved: number;
+  rejected: number;
+  total: number;
+}
+
 interface AdmissionsState {
   // Data
   enquiries: Enquiry[];
   applications: Application[];
+  /** Applications filtered server-side to `status=verified` — used by the Approval Queue. */
+  pendingApprovals: Application[];
   /** Per-application document lists, keyed by applicationId. */
   documentsByApp: Record<string, ApplicationDocument[]>;
+
+  // Pagination — backed by the server-side `total/page/limit` envelope.
+  enquiriesTotal: number;
+  enquiriesPage: number;
+  enquiriesLimit: number;
+  applicationsTotal: number;
+  applicationsPage: number;
+  applicationsLimit: number;
+  pendingApprovalsTotal: number;
+  pendingApprovalsPage: number;
+  pendingApprovalsLimit: number;
+
+  // Stats for the dashboard pipeline strip — only the totals, no rows.
+  applicationStats: ApplicationStats;
 
   // Loading flags
   enquiriesLoading: boolean;
   applicationsLoading: boolean;
+  pendingApprovalsLoading: boolean;
+  statsLoading: boolean;
   documentsLoading: boolean;
 
   // Error
   error: string | null;
 
   // ─── Fetch actions ────────────────────────────
-  fetchEnquiries: () => Promise<void>;
-  fetchApplications: () => Promise<void>;
+  fetchEnquiries: (page?: number, limit?: number, search?: string) => Promise<void>;
+  fetchApplications: (page?: number, limit?: number, search?: string) => Promise<void>;
+  fetchPendingApprovals: (page?: number, limit?: number) => Promise<void>;
+  fetchApplicationStats: () => Promise<void>;
 
   // ─── Enquiry actions ──────────────────────────
   createEnquiry: (dto: CreateEnquiryDto) => Promise<Enquiry>;
@@ -89,39 +119,126 @@ function normalizeDocType(type: string): string {
   return type.trim().toLowerCase().replace(/\s+/g, '_') || 'other';
 }
 
+const DEFAULT_PAGE_SIZE = 100;
+const EMPTY_STATS: ApplicationStats = {
+  submitted: 0, under_review: 0, verified: 0, approved: 0, rejected: 0, total: 0,
+};
+
 export const useAdmissionsStore = create<AdmissionsState>((set, get) => ({
   enquiries: [],
   applications: [],
+  pendingApprovals: [],
   documentsByApp: {},
+  enquiriesTotal: 0,
+  enquiriesPage: 1,
+  enquiriesLimit: DEFAULT_PAGE_SIZE,
+  applicationsTotal: 0,
+  applicationsPage: 1,
+  applicationsLimit: DEFAULT_PAGE_SIZE,
+  pendingApprovalsTotal: 0,
+  pendingApprovalsPage: 1,
+  pendingApprovalsLimit: DEFAULT_PAGE_SIZE,
+  applicationStats: EMPTY_STATS,
   enquiriesLoading: false,
   applicationsLoading: false,
+  pendingApprovalsLoading: false,
+  statsLoading: false,
   documentsLoading: false,
   error: null,
 
   // ─── Fetch ────────────────────────────────────
-  fetchEnquiries: async () => {
+  fetchEnquiries: async (page = 1, limit = DEFAULT_PAGE_SIZE, search) => {
     const { user, activeSchoolId } = useAuthStore.getState();
     const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
-    if (!schoolId) { set({ enquiries: [] }); return; }
+    if (!schoolId) {
+      set({ enquiries: [], enquiriesTotal: 0, enquiriesPage: 1, enquiriesLimit: limit });
+      return;
+    }
     set({ enquiriesLoading: true, error: null });
     try {
-      const res = await enquiriesApi.list(schoolId, { page: 1, limit: 100 });
-      set({ enquiries: res.data, enquiriesLoading: false });
+      const res = await enquiriesApi.list(schoolId, { page, limit, search });
+      set({
+        enquiries: res.data,
+        enquiriesTotal: res.total,
+        enquiriesPage: res.page,
+        enquiriesLimit: res.limit,
+        enquiriesLoading: false,
+      });
     } catch (err) {
       set({ error: (err as Error).message, enquiriesLoading: false });
     }
   },
 
-  fetchApplications: async () => {
+  fetchApplications: async (page = 1, limit = DEFAULT_PAGE_SIZE, search) => {
     const { user, activeSchoolId } = useAuthStore.getState();
     const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
-    if (!schoolId) { set({ applications: [] }); return; }
+    if (!schoolId) {
+      set({ applications: [], applicationsTotal: 0, applicationsPage: 1, applicationsLimit: limit });
+      return;
+    }
     set({ applicationsLoading: true, error: null });
     try {
-      const res = await applicationsApi.list(schoolId, { page: 1, limit: 100 });
-      set({ applications: res.data, applicationsLoading: false });
+      const res = await applicationsApi.list(schoolId, { page, limit, search });
+      set({
+        applications: res.data,
+        applicationsTotal: res.total,
+        applicationsPage: res.page,
+        applicationsLimit: res.limit,
+        applicationsLoading: false,
+      });
     } catch (err) {
       set({ error: (err as Error).message, applicationsLoading: false });
+    }
+  },
+
+  fetchPendingApprovals: async (page = 1, limit = DEFAULT_PAGE_SIZE) => {
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) {
+      set({ pendingApprovals: [], pendingApprovalsTotal: 0, pendingApprovalsPage: 1, pendingApprovalsLimit: limit });
+      return;
+    }
+    set({ pendingApprovalsLoading: true, error: null });
+    try {
+      const res = await applicationsApi.list(schoolId, { page, limit, status: 'verified' });
+      // Belt-and-suspenders: filter client-side too in case the backend ignores `?status=`.
+      const filtered = res.data.filter((a) => a.status === 'verified');
+      set({
+        pendingApprovals: filtered,
+        pendingApprovalsTotal: res.total,
+        pendingApprovalsPage: res.page,
+        pendingApprovalsLimit: res.limit,
+        pendingApprovalsLoading: false,
+      });
+    } catch (err) {
+      set({ error: (err as Error).message, pendingApprovalsLoading: false });
+    }
+  },
+
+  fetchApplicationStats: async () => {
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) {
+      set({ applicationStats: EMPTY_STATS });
+      return;
+    }
+    set({ statsLoading: true });
+    try {
+      // 5 parallel cheap calls — limit=1 because we only need the `total` for each status.
+      const statuses = ['submitted', 'under_review', 'verified', 'approved', 'rejected'] as const;
+      const results = await Promise.all(
+        statuses.map((s) =>
+          applicationsApi.list(schoolId, { page: 1, limit: 1, status: s }).then((r) => r.total),
+        ),
+      );
+      const [submitted, under_review, verified, approved, rejected] = results;
+      const total = submitted + under_review + verified + approved + rejected;
+      set({
+        applicationStats: { submitted, under_review, verified, approved, rejected, total },
+        statsLoading: false,
+      });
+    } catch (err) {
+      set({ error: (err as Error).message, statsLoading: false });
     }
   },
 

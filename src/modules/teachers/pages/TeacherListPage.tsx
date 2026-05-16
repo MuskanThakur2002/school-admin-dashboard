@@ -10,11 +10,14 @@ import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button/Button';
+import { Pagination } from '@/components/ui/Pagination/Pagination';
 
 export default function TeacherListPage() {
   const navigate = useNavigate();
   const teachers = useTeacherStore((s) => s.teachers);
   const total = useTeacherStore((s) => s.total);
+  const page = useTeacherStore((s) => s.page);
+  const limit = useTeacherStore((s) => s.limit);
   const loading = useTeacherStore((s) => s.loading);
   const fetchTeachers = useTeacherStore((s) => s.fetchTeachers);
   const createTeacher = useTeacherStore((s) => s.createTeacher);
@@ -26,7 +29,7 @@ export default function TeacherListPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchTeachers(1, 50);
+    fetchTeachers(1, 25);
   }, [fetchTeachers]);
 
   const filteredData = useMemo(() => {
@@ -189,9 +192,14 @@ export default function TeacherListPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filteredData.length} of {total} teachers</p>
-        </div>
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={(p) => fetchTeachers(p, limit)}
+          onLimitChange={(l) => fetchTeachers(1, l)}
+          label="teachers"
+        />
       </div>
 
       <AddTeacherModal

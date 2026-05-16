@@ -1,13 +1,15 @@
 import { create } from 'zustand';
-import { feeApi } from '@/services/modules/fee.api';
+import { feeApi, type FeeAssignmentListParams } from '@/services/modules/fee.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { isSuperAdmin } from '@/types/auth.types';
 import type {
-  FeeHead, FeeStructure, FeeStructureItem,
+  FeeHead, FeeStructure, FeeStructureItem, FeeInstallment, FeeAssignment,
   InstallmentPlan, Concession, LateFeeRule,
   CreateFeeHeadDto, UpdateFeeHeadDto,
   CreateFeeStructureDto, UpdateFeeStructureDto,
   CreateFeeStructureItemDto, UpdateFeeStructureItemDto,
+  CreateFeeInstallmentDto, UpdateFeeInstallmentDto,
+  CreateFeeAssignmentDto, UpdateFeeAssignmentDto,
   CreateInstallmentPlanDto, CreateConcessionDto, CreateLateFeeRuleDto,
 } from '@/types/fee.types';
 
@@ -20,21 +22,35 @@ function resolveSchoolId(): string {
 
 interface FeeState {
   heads: FeeHead[];
+  headsPage: number;
+  headsLimit: number;
+  headsTotal: number;
+
   structures: FeeStructure[];
+  structuresPage: number;
+  structuresLimit: number;
+  structuresTotal: number;
+
+  assignments: FeeAssignment[];
+  assignmentsPage: number;
+  assignmentsLimit: number;
+  assignmentsTotal: number;
+
   plans: InstallmentPlan[];
   concessions: Concession[];
   rules: LateFeeRule[];
   loading: boolean;
+  assignmentsLoading: boolean;
   error: string | null;
 
   // ─── Heads ─────────────────────────────────────────
-  fetchHeads: () => Promise<void>;
+  fetchHeads: (page?: number, limit?: number) => Promise<void>;
   createHead: (dto: CreateFeeHeadDto) => Promise<FeeHead>;
   updateHead: (id: string, dto: UpdateFeeHeadDto) => Promise<void>;
   deleteHead: (id: string) => Promise<void>;
 
   // ─── Structures ────────────────────────────────────
-  fetchStructures: () => Promise<void>;
+  fetchStructures: (page?: number, limit?: number) => Promise<void>;
   createStructure: (dto: CreateFeeStructureDto) => Promise<FeeStructure>;
   updateStructure: (id: string, dto: UpdateFeeStructureDto) => Promise<FeeStructure>;
   deleteStructure: (id: string) => Promise<void>;
@@ -43,6 +59,21 @@ interface FeeState {
   createItem: (dto: CreateFeeStructureItemDto) => Promise<FeeStructureItem>;
   updateItem: (id: string, dto: UpdateFeeStructureItemDto) => Promise<FeeStructureItem>;
   deleteItem: (structureId: string, itemId: string) => Promise<void>;
+
+  // ─── Installments ──────────────────────────────────
+  createInstallment: (dto: CreateFeeInstallmentDto) => Promise<FeeInstallment>;
+  updateInstallment: (id: string, dto: UpdateFeeInstallmentDto) => Promise<FeeInstallment>;
+  deleteInstallment: (structureId: string, installmentId: string) => Promise<void>;
+
+  // ─── Assignments ───────────────────────────────────
+  fetchAssignments: (
+    page?: number,
+    limit?: number,
+    params?: FeeAssignmentListParams,
+  ) => Promise<void>;
+  createAssignment: (dto: CreateFeeAssignmentDto) => Promise<FeeAssignment>;
+  updateAssignment: (id: string, dto: UpdateFeeAssignmentDto) => Promise<FeeAssignment>;
+  deleteAssignment: (id: string) => Promise<void>;
 
   // ─── Plans (mock) ──────────────────────────────────
   fetchPlans: () => Promise<void>;
@@ -62,16 +93,25 @@ interface FeeState {
 }
 
 export const useFeeStore = create<FeeState>((set) => ({
-  heads: [], structures: [], plans: [], concessions: [], rules: [],
-  loading: false, error: null,
+  heads: [], headsPage: 1, headsLimit: 25, headsTotal: 0,
+  structures: [], structuresPage: 1, structuresLimit: 25, structuresTotal: 0,
+  assignments: [], assignmentsPage: 1, assignmentsLimit: 25, assignmentsTotal: 0,
+  plans: [], concessions: [], rules: [],
+  loading: false, assignmentsLoading: false, error: null,
 
   // ─── Heads ─────────────────────────────────────────
-  fetchHeads: async () => {
+  fetchHeads: async (page = 1, limit = 25) => {
     set({ loading: true, error: null });
     try {
       const schoolId = resolveSchoolId();
-      const res = await feeApi.listHeads(schoolId, { page: 1, limit: 100 });
-      set({ heads: res.data, loading: false });
+      const res = await feeApi.listHeads(schoolId, { page, limit });
+      set({
+        heads: res.data,
+        headsPage: res.page,
+        headsLimit: res.limit,
+        headsTotal: res.total,
+        loading: false,
+      });
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }
@@ -97,12 +137,18 @@ export const useFeeStore = create<FeeState>((set) => ({
   },
 
   // ─── Structures ────────────────────────────────────
-  fetchStructures: async () => {
+  fetchStructures: async (page = 1, limit = 25) => {
     set({ loading: true, error: null });
     try {
       const schoolId = resolveSchoolId();
-      const res = await feeApi.listStructures(schoolId, { page: 1, limit: 100 });
-      set({ structures: res.data, loading: false });
+      const res = await feeApi.listStructures(schoolId, { page, limit });
+      set({
+        structures: res.data,
+        structuresPage: res.page,
+        structuresLimit: res.limit,
+        structuresTotal: res.total,
+        loading: false,
+      });
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }
@@ -188,6 +234,102 @@ export const useFeeStore = create<FeeState>((set) => ({
           : st,
       ),
     }));
+  },
+
+  // ─── Installments ──────────────────────────────────
+  createInstallment: async (dto) => {
+    const schoolId = resolveSchoolId();
+    const created = await feeApi.createInstallment(schoolId, dto);
+    set((s) => ({
+      structures: s.structures.map((st) =>
+        st.id === dto.feeStructureId
+          ? { ...st, feeInstallments: [...st.feeInstallments, created] }
+          : st,
+      ),
+    }));
+    return created;
+  },
+
+  updateInstallment: async (id, dto) => {
+    const schoolId = resolveSchoolId();
+    const updated = await feeApi.updateInstallment(schoolId, id, dto);
+    set((s) => ({
+      structures: s.structures.map((st) => ({
+        ...st,
+        feeInstallments: st.feeInstallments.map((inst) =>
+          inst.id === id ? { ...inst, ...updated } : inst,
+        ),
+      })),
+    }));
+    return updated;
+  },
+
+  deleteInstallment: async (structureId, installmentId) => {
+    const schoolId = resolveSchoolId();
+    await feeApi.deleteInstallment(schoolId, installmentId);
+    set((s) => ({
+      structures: s.structures.map((st) =>
+        st.id === structureId
+          ? { ...st, feeInstallments: st.feeInstallments.filter((inst) => inst.id !== installmentId) }
+          : st,
+      ),
+    }));
+  },
+
+  // ─── Assignments ───────────────────────────────────
+  fetchAssignments: async (page = 1, limit = 25, params) => {
+    set({ assignmentsLoading: true, error: null });
+    try {
+      const schoolId = resolveSchoolId();
+      const res = await feeApi.listAssignments(schoolId, { page, limit, ...params });
+      set({
+        assignments: res.data,
+        assignmentsPage: res.page,
+        assignmentsLimit: res.limit,
+        assignmentsTotal: res.total,
+        assignmentsLoading: false,
+      });
+    } catch (err) {
+      set({ error: (err as Error).message, assignmentsLoading: false });
+    }
+  },
+
+  createAssignment: async (dto) => {
+    const schoolId = resolveSchoolId();
+    const created = await feeApi.createAssignment(schoolId, dto);
+    // Hydrate feeStructure from cache so the row renders the name immediately.
+    set((s) => {
+      const feeStructure = s.structures.find((st) => st.id === created.feeStructureId);
+      const hydrated: FeeAssignment = feeStructure ? { ...created, feeStructure } : created;
+      return { assignments: [hydrated, ...s.assignments] };
+    });
+    return created;
+  },
+
+  updateAssignment: async (id, dto) => {
+    const schoolId = resolveSchoolId();
+    const updated = await feeApi.updateAssignment(schoolId, id, dto);
+    set((s) => ({
+      assignments: s.assignments.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              ...updated,
+              feeStructure:
+                updated.feeStructure
+                ?? s.structures.find((st) => st.id === updated.feeStructureId)
+                ?? a.feeStructure,
+            }
+          : a,
+      ),
+    }));
+    return updated;
+  },
+
+  deleteAssignment: async (id) => {
+    const schoolId = resolveSchoolId();
+    await feeApi.deleteAssignment(schoolId, id);
+    set((s) => ({ assignments: s.assignments.filter((a) => a.id !== id) }));
   },
 
   // ─── Plans (mock) ──────────────────────────────────

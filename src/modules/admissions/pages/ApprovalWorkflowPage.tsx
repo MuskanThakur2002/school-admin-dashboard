@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2, XCircle, FileText, User, Calendar,
-  AlertTriangle, GraduationCap,
+  AlertTriangle, GraduationCap, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -14,13 +14,14 @@ import { useParentStore } from '@/stores/parent.store';
 import type { Application } from '@/types/admissions.types';
 
 export default function ApprovalWorkflowPage() {
-  const applications = useAdmissionsStore((s) => s.applications);
-  const loading = useAdmissionsStore((s) => s.applicationsLoading);
-  const pending = useMemo(
-    () => applications.filter((a) => a.status === 'verified'),
-    [applications],
-  );
-  const fetchApplications = useAdmissionsStore((s) => s.fetchApplications);
+  // Verified applications come from a dedicated server-side filtered fetch so the
+  // queue stays correct even when there are more than `limit` applications total.
+  const pending = useAdmissionsStore((s) => s.pendingApprovals);
+  const loading = useAdmissionsStore((s) => s.pendingApprovalsLoading);
+  const total = useAdmissionsStore((s) => s.pendingApprovalsTotal);
+  const page = useAdmissionsStore((s) => s.pendingApprovalsPage);
+  const limit = useAdmissionsStore((s) => s.pendingApprovalsLimit);
+  const fetchPendingApprovals = useAdmissionsStore((s) => s.fetchPendingApprovals);
   const fetchDocuments = useAdmissionsStore((s) => s.fetchApplicationDocuments);
   const approveApplication = useAdmissionsStore((s) => s.approveApplication);
   const rejectApplication = useAdmissionsStore((s) => s.rejectApplication);
@@ -33,8 +34,8 @@ export default function ApprovalWorkflowPage() {
 
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const selectedApp = useMemo(
-    () => applications.find((a) => a.id === selectedAppId) || null,
-    [applications, selectedAppId],
+    () => pending.find((a) => a.id === selectedAppId) || null,
+    [pending, selectedAppId],
   );
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -48,10 +49,10 @@ export default function ApprovalWorkflowPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchApplications();
+    fetchPendingApprovals(1, 100);
     if (classes.length === 0) fetchClasses();
     if (parents.length === 0) fetchParents(1, 100);
-  }, [fetchApplications, fetchClasses, fetchParents, classes.length, parents.length]);
+  }, [fetchPendingApprovals, fetchClasses, fetchParents, classes.length, parents.length]);
 
   const selectedClass = useMemo(
     () => classes.find((c) => c.id === assignedClassId) || null,
@@ -258,6 +259,33 @@ export default function ApprovalWorkflowPage() {
               </div>
             );
           })}
+
+          {total > limit && (
+            <div className="flex items-center justify-between px-6 py-3.5 rounded-2xl bg-[var(--card-bg)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              <p className="text-[0.75rem] text-[var(--text-muted)]">
+                Showing {pending.length} of {total} pending approval{total === 1 ? '' : 's'}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchPendingApprovals(page - 1, limit)}
+                  disabled={page <= 1}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg-hover)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                </button>
+                <span className="text-[0.75rem] font-semibold text-[var(--text-tertiary)] px-2">
+                  Page {page} of {Math.max(1, Math.ceil(total / limit))}
+                </span>
+                <button
+                  onClick={() => fetchPendingApprovals(page + 1, limit)}
+                  disabled={page >= Math.ceil(total / limit)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg-hover)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

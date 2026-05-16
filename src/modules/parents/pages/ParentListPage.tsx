@@ -10,6 +10,7 @@ import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button/Button';
+import { Pagination } from '@/components/ui/Pagination/Pagination';
 
 function formatIncome(value: number): string {
   if (!Number.isFinite(value)) return '—';
@@ -24,6 +25,8 @@ export default function ParentListPage() {
   const navigate = useNavigate();
   const parents = useParentStore((s) => s.parents);
   const total = useParentStore((s) => s.total);
+  const page = useParentStore((s) => s.page);
+  const limit = useParentStore((s) => s.limit);
   const loading = useParentStore((s) => s.loading);
   const fetchParents = useParentStore((s) => s.fetchParents);
   const createParent = useParentStore((s) => s.createParent);
@@ -35,7 +38,7 @@ export default function ParentListPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchParents(1, 50);
+    fetchParents(1, 1);
   }, [fetchParents]);
 
   const filteredData = useMemo(() => {
@@ -196,9 +199,15 @@ export default function ParentListPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filteredData.length} of {total} parents</p>
-        </div>
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={(p) => fetchParents(p, limit)}
+          onLimitChange={(l) => fetchParents(1, l)}
+          pageSizeOptions={[1, 10, 25, 50, 100]}
+          label="parents"
+        />
       </div>
 
       <AddParentModal

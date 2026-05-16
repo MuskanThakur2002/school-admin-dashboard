@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
+import { Pagination } from '@/components/ui/Pagination/Pagination';
 import type { CreateStudentDto, StudentGender } from '@/types/student.types';
 
 const genderOptions: { label: string; value: StudentGender }[] = [
@@ -35,6 +36,8 @@ export default function StudentListPage() {
   const navigate = useNavigate();
   const students = useStudentsStore((s) => s.students);
   const total = useStudentsStore((s) => s.total);
+  const page = useStudentsStore((s) => s.page);
+  const limit = useStudentsStore((s) => s.limit);
   const loading = useStudentsStore((s) => s.loading);
   const fetchStudents = useStudentsStore((s) => s.fetchStudents);
   const deleteStudent = useStudentsStore((s) => s.deleteStudent);
@@ -50,8 +53,10 @@ export default function StudentListPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Initial load only; Pagination drives subsequent fetches imperatively
+  // so we don't re-fire on the page/limit state writes done by fetchStudents.
   useEffect(() => {
-    fetchStudents(1, 50);
+    fetchStudents(1, 25);
   }, [fetchStudents]);
 
   // Load academic context once; needed to resolve class names for each
@@ -265,9 +270,14 @@ export default function StudentListPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filteredData.length} of {total} students</p>
-        </div>
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={(p) => fetchStudents(p, limit)}
+          onLimitChange={(l) => fetchStudents(1, l)}
+          label="students"
+        />
       </div>
 
       <AddStudentModal open={modalOpen} onOpenChange={setModalOpen} />

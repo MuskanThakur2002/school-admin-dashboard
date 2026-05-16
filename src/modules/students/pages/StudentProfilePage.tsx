@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, User, GraduationCap, Calendar, Wallet, Building2, Users,
   FileText, CheckCircle2, Clock, ExternalLink, Pencil, XCircle, Plane, ClipboardCheck,
+  Plus, Trash2,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
+import { useEnrollmentStore } from '@/stores/enrollment.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAcademicStore } from '@/stores/academic.store';
+import { useUIStore } from '@/stores/ui.store';
 import { applicationsApi } from '@/services/modules/applications.api';
 import { enrollmentsApi } from '@/services/modules/enrollments.api';
 import { attendanceApi } from '@/services/modules/attendance.api';
 import { isSuperAdmin } from '@/types/auth.types';
 import { EditStudentModal } from '@/modules/students/components/EditStudentModal';
+import { EditEnrollmentModal } from '@/modules/students/components/EditEnrollmentModal';
 import type { Student, StudentEnrollment } from '@/types/student.types';
 import type { AttendanceRecord } from '@/types/attendance.types';
 import type { ApplicationDocument } from '@/types/admissions.types';
@@ -64,7 +68,12 @@ export default function StudentProfilePage() {
   const classes = useAcademicStore((s) => s.classes);
   const fetchClasses = useAcademicStore((s) => s.fetchClasses);
 
+  const deleteEnrollmentStore = useEnrollmentStore((s) => s.deleteEnrollment);
+  const showToast = useUIStore((s) => s.showToast);
+
   const [editOpen, setEditOpen] = useState(false);
+  const [enrollmentModalOpen, setEnrollmentModalOpen] = useState(false);
+  const [editingEnrollment, setEditingEnrollment] = useState<StudentEnrollment | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -101,7 +110,7 @@ export default function StudentProfilePage() {
 
   // Fetch this student's enrollments — used by Current Enrollment, Enrollment
   // History, and to scope the Attendance lookup below.
-  useEffect(() => {
+  const refreshEnrollments = useCallback(async () => {
     if (!student?.id) return;
     const { user, activeSchoolId } = useAuthStore.getState();
     const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
@@ -109,12 +118,41 @@ export default function StudentProfilePage() {
 
     setEnrollmentsLoading(true);
     setEnrollmentsError(null);
-    enrollmentsApi
-      .list(schoolId, { studentId: student.id, limit: 100 })
-      .then((res) => setEnrollments(res.data))
-      .catch((err) => setEnrollmentsError((err as Error).message))
-      .finally(() => setEnrollmentsLoading(false));
+    try {
+      const res = await enrollmentsApi.list(schoolId, { studentId: student.id, limit: 100 });
+      setEnrollments(res.data);
+    } catch (err) {
+      setEnrollmentsError((err as Error).message);
+    } finally {
+      setEnrollmentsLoading(false);
+    }
   }, [student?.id]);
+
+  useEffect(() => {
+    refreshEnrollments();
+  }, [refreshEnrollments]);
+
+  const handleOpenEnroll = () => {
+    setEditingEnrollment(null);
+    setEnrollmentModalOpen(true);
+  };
+
+  const handleEditEnrollment = (enr: StudentEnrollment) => {
+    setEditingEnrollment(enr);
+    setEnrollmentModalOpen(true);
+  };
+
+  const handleDeleteEnrollment = async (enr: StudentEnrollment) => {
+    if (!confirm('Delete this enrollment? This cannot be undone.')) return;
+    try {
+      await deleteEnrollmentStore(enr.id);
+      setEnrollments((prev) => prev.filter((e) => e.id !== enr.id));
+      showToast({ type: 'info', title: 'Enrollment deleted' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      showToast({ type: 'error', title: 'Failed to delete enrollment', message });
+    }
+  };
 
   // Current enrollment = most recently joined. Used as the source for the
   // Attendance section (which queries by studentEnrollmentId).
@@ -256,8 +294,15 @@ export default function StudentProfilePage() {
               <Pencil className="w-3.5 h-3.5" /> Edit
             </button>
             <button
-              onClick={() => navigate(`/ledger/${student.id}`)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[#002c98] bg-blue-50 hover:bg-blue-100 transition-all"
+              onClick={() => {
+                if (!currentEnrollment) {
+                  showToast({ type: 'error', title: 'No enrollment', message: 'This student has no active enrollment to view a ledger for.' });
+                  return;
+                }
+                navigate(`/ledger/${currentEnrollment.id}`);
+              }}
+              disabled={!currentEnrollment}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[0.75rem] font-semibold text-[#002c98] bg-blue-50 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Wallet className="w-3.5 h-3.5" /> View Ledger
             </button>
@@ -430,12 +475,22 @@ export default function StudentProfilePage() {
         </SectionCard>
 
         <SectionCard title="Enrollment History" icon={GraduationCap}>
+          <div className="flex items-center justify-end mb-3 -mt-2">
+            <button
+              onClick={handleOpenEnroll}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-[0.75rem] font-semibold text-white bg-[#002c98] hover:brightness-110 transition-all shadow-[0_2px_8px_rgba(0,44,152,0.2)]"
+            >
+              <Plus className="w-3.5 h-3.5" /> Enroll
+            </button>
+          </div>
           {enrollmentsLoading ? (
             <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">Loading enrollments…</p>
           ) : enrollmentsError ? (
             <p className="text-[0.8125rem] text-red-600 py-2">{enrollmentsError}</p>
           ) : enrollments.length === 0 ? (
-            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">No enrollment records yet.</p>
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">
+              No enrollment records yet. Click <span className="font-semibold">Enroll</span> to assign a class-section.
+            </p>
           ) : (
             <div className="divide-y divide-[var(--border-color,#eef0f3)]">
               {enrollments.map((e) => {
@@ -443,8 +498,8 @@ export default function StudentProfilePage() {
                 const section = e.classSection?.section ?? '—';
                 const isCurrent = currentEnrollment?.id === e.id;
                 return (
-                  <div key={e.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
-                    <div className="min-w-0">
+                  <div key={e.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0 gap-3">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">
                           {className} – {section}
@@ -460,9 +515,25 @@ export default function StudentProfilePage() {
                         {e.leftAt && e.leftAt !== e.joinedAt && ` · Left ${e.leftAt}`}
                       </p>
                     </div>
-                    <span className="text-[0.6875rem] font-semibold text-[var(--text-tertiary)] capitalize">
-                      {e.status}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[0.6875rem] font-semibold text-[var(--text-tertiary)] capitalize mr-1">
+                        {e.status}
+                      </span>
+                      <button
+                        onClick={() => handleEditEnrollment(e)}
+                        className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[#002c98] hover:bg-blue-50 transition-colors"
+                        aria-label="Edit enrollment"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteEnrollment(e)}
+                        className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
+                        aria-label="Delete enrollment"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -476,6 +547,14 @@ export default function StudentProfilePage() {
         onOpenChange={setEditOpen}
         student={student}
         onUpdated={(s) => setStudent(s)}
+      />
+
+      <EditEnrollmentModal
+        open={enrollmentModalOpen}
+        onOpenChange={setEnrollmentModalOpen}
+        studentId={student.id}
+        enrollment={editingEnrollment}
+        onSaved={() => { refreshEnrollments(); }}
       />
     </div>
   );

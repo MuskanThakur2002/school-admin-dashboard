@@ -10,9 +10,19 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
-import { useAdjustmentStore } from '@/stores/adjustment.store';
-import { useDemoStudentsStore } from '@/stores/students.store';
-import type { AdjustmentReason } from '@/services/modules/adjustment.api';
+import { useLedgerStore } from '@/stores/ledger.store';
+import { useEnrollmentStore } from '@/stores/enrollment.store';
+import { useAcademicStore } from '@/stores/academic.store';
+import { useAuthStore } from '@/stores/auth.store';
+
+type AdjustmentReason =
+  | 'fee_correction'
+  | 'overcharge_reversal'
+  | 'goodwill_credit'
+  | 'penalty_waiver'
+  | 'rounding_difference'
+  | 'duplicate_charge'
+  | 'other';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
@@ -33,20 +43,33 @@ const typeOptions = [
   { label: 'Debit (increase balance)', value: 'debit' },
 ];
 
+function parseReason(reference: string): AdjustmentReason {
+  return reference in reasonConfig ? (reference as AdjustmentReason) : 'other';
+}
+
+function splitRemarks(remarks: string): { description: string; note: string } {
+  const idx = remarks.indexOf('\n');
+  if (idx === -1) return { description: remarks, note: '' };
+  return { description: remarks.slice(0, idx), note: remarks.slice(idx + 1) };
+}
+
 export default function ManualAdjustmentPage() {
-  const adjustments = useAdjustmentStore((s) => s.adjustments);
-  const loading = useAdjustmentStore((s) => s.loading);
-  const fetchAdjustments = useAdjustmentStore((s) => s.fetchAdjustments);
-  const postAdjustment = useAdjustmentStore((s) => s.postAdjustment);
-  const students = useDemoStudentsStore((s) => s.students);
-  const fetchStudents = useDemoStudentsStore((s) => s.fetchStudents);
+  const entries = useLedgerStore((s) => s.entries);
+  const loading = useLedgerStore((s) => s.loading);
+  const fetchLedgers = useLedgerStore((s) => s.fetchLedgers);
+  const createEntry = useLedgerStore((s) => s.createEntry);
+  const enrollments = useEnrollmentStore((s) => s.enrollments);
+  const fetchEnrollments = useEnrollmentStore((s) => s.fetchEnrollments);
+  const years = useAcademicStore((s) => s.years);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const userId = useAuthStore((s) => s.user?.id);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [formType, setFormType] = useState<'debit' | 'credit'>('credit');
   const [formReason, setFormReason] = useState<AdjustmentReason>('fee_correction');
@@ -56,9 +79,38 @@ export default function ManualAdjustmentPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (adjustments.length === 0) fetchAdjustments();
-    if (students.length === 0) fetchStudents();
-  }, [adjustments.length, students.length, fetchAdjustments, fetchStudents]);
+    if (years.length === 0) fetchYears();
+    if (enrollments.length === 0) fetchEnrollments();
+    if (entries.length === 0) fetchLedgers();
+  }, [years.length, enrollments.length, entries.length, fetchYears, fetchEnrollments, fetchLedgers]);
+
+  const enrollmentsById = useMemo(
+    () => new Map(enrollments.map((e) => [e.id, e])),
+    [enrollments],
+  );
+
+  // Project ledger entries with category === 'adjustment' into the UI shape
+  // the rest of this page expects.
+  const adjustments = useMemo(() => entries
+    .filter((e) => e.category === 'adjustment')
+    .map((e) => {
+      const enr = enrollmentsById.get(e.studentEnrollmentId);
+      const { description, note } = splitRemarks(e.remarks);
+      return {
+        id: e.id,
+        date: e.createdAt.slice(0, 10),
+        type: (e.entryType === 'Credit' ? 'credit' : 'debit') as 'credit' | 'debit',
+        reason: parseReason(e.reference),
+        description,
+        remarks: note,
+        studentEnrollmentId: e.studentEnrollmentId,
+        studentName: enr?.student?.name ?? '',
+        admissionNo: enr?.student?.admissionNumber ?? '',
+        class: enr?.classSection?.section ?? '',
+        amount: Number(e.amount),
+        postedBy: 'Admin',
+      };
+    }), [entries, enrollmentsById]);
 
   const filtered = useMemo(() => adjustments.filter((a) => {
     const ms = !search || a.studentName.toLowerCase().includes(search.toLowerCase()) || a.description.toLowerCase().includes(search.toLowerCase());
@@ -70,19 +122,20 @@ export default function ManualAdjustmentPage() {
   const totalCredits = adjustments.filter((a) => a.type === 'credit').reduce((s, a) => s + a.amount, 0);
   const totalDebits = adjustments.filter((a) => a.type === 'debit').reduce((s, a) => s + a.amount, 0);
 
-  const filteredStudents = useMemo(() => {
-    if (!studentSearch) return students.slice(0, 6);
+  const filteredEnrollments = useMemo(() => {
+    const list = enrollments.filter((e) => e.student?.name);
+    if (!studentSearch) return list.slice(0, 6);
     const q = studentSearch.toLowerCase();
-    return students.filter((s) =>
-      `${s.firstName} ${s.lastName}`.toLowerCase().includes(q) ||
-      s.admissionNo.toLowerCase().includes(q),
+    return list.filter((e) =>
+      (e.student?.name ?? '').toLowerCase().includes(q) ||
+      (e.student?.admissionNumber ?? '').toLowerCase().includes(q),
     ).slice(0, 8);
-  }, [students, studentSearch]);
+  }, [enrollments, studentSearch]);
 
-  const selectedStudent = students.find((s) => s.id === selectedStudentId);
+  const selectedEnrollment = enrollments.find((e) => e.id === selectedEnrollmentId);
 
   const resetForm = () => {
-    setSelectedStudentId('');
+    setSelectedEnrollmentId('');
     setStudentSearch('');
     setFormType('credit');
     setFormReason('fee_correction');
@@ -92,7 +145,7 @@ export default function ManualAdjustmentPage() {
   };
 
   const handlePost = async () => {
-    if (!selectedStudentId || !formAmount || !formDesc || !formRemarks) {
+    if (!selectedEnrollmentId || !formAmount || !formDesc || !formRemarks) {
       showToast({ type: 'error', title: 'Missing fields', message: 'Student, description, amount, and remarks are required' });
       return;
     }
@@ -100,20 +153,33 @@ export default function ManualAdjustmentPage() {
       showToast({ type: 'error', title: 'Invalid amount', message: 'Amount must be greater than zero' });
       return;
     }
+    const academicYearId = selectedEnrollment?.academicYearId
+      ?? years.find((y) => y.isCurrent)?.id
+      ?? years[0]?.id;
+    if (!academicYearId || !userId) {
+      showToast({ type: 'error', title: 'Missing context', message: 'Active academic year or user not available' });
+      return;
+    }
     setSubmitting(true);
     try {
-      const adj = await postAdjustment({
-        studentId: selectedStudentId,
-        type: formType,
-        reason: formReason,
-        description: formDesc,
+      const created = await createEntry({
+        studentEnrollmentId: selectedEnrollmentId,
+        academicYearId,
+        entryType: formType === 'credit' ? 'Credit' : 'Debit',
+        category: 'adjustment',
         amount: Number(formAmount),
-        remarks: formRemarks,
+        runningBalance: 0,
+        reference: formReason,
+        paymentMode: 'adjustment',
+        remarks: `${formDesc}\n${formRemarks}`,
+        createdById: userId,
       });
-      const action = adj.type === 'credit' ? 'credited to' : 'debited from';
-      showToast({ type: 'success', title: 'Adjustment posted', message: `${fmt(adj.amount)} ${action} ${adj.studentName}` });
+      const action = created.entryType === 'Credit' ? 'credited to' : 'debited from';
+      const studentName = selectedEnrollment?.student?.name ?? 'student';
+      showToast({ type: 'success', title: 'Adjustment posted', message: `${fmt(Number(formAmount))} ${action} ${studentName}` });
       setModalOpen(false);
       resetForm();
+      await fetchLedgers();
     } catch (err) {
       showToast({ type: 'error', title: 'Failed', message: (err as Error).message });
     } finally {
@@ -139,7 +205,7 @@ export default function ManualAdjustmentPage() {
           { label: 'Total Adjustments', value: adjustments.length, icon: FileText, color: 'bg-blue-50 text-blue-600' },
           { label: 'Credits Issued', value: fmt(totalCredits), icon: ArrowDownLeft, color: 'bg-emerald-50 text-emerald-600' },
           { label: 'Debits Issued', value: fmt(totalDebits), icon: ArrowUpRight, color: 'bg-red-50 text-red-500' },
-          { label: 'Students Adjusted', value: new Set(adjustments.map((a) => a.studentId)).size, icon: Users, color: 'bg-violet-50 text-violet-600' },
+          { label: 'Students Adjusted', value: new Set(adjustments.map((a) => a.studentEnrollmentId)).size, icon: Users, color: 'bg-violet-50 text-violet-600' },
         ].map((m) => (
           <div key={m.label} className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div className="flex items-center justify-between mb-3">
@@ -230,7 +296,7 @@ export default function ManualAdjustmentPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{adj.studentName}</p>
-                  <p className="text-[0.6875rem] text-[var(--text-muted)]">{adj.admissionNo} &middot; {adj.class}</p>
+                  <p className="text-[0.6875rem] text-[var(--text-muted)]">{adj.admissionNo}{adj.class ? ` · ${adj.class}` : ''}</p>
                 </div>
                 <span className={cn('font-display text-[0.875rem] font-bold', isCredit ? 'text-emerald-600' : 'text-red-500')}>
                   {isCredit ? '-' : '+'}{fmt(adj.amount)}
@@ -265,23 +331,27 @@ export default function ManualAdjustmentPage() {
               />
             </div>
             <div className="max-h-[160px] overflow-y-auto space-y-1">
-              {filteredStudents.map((s) => (
-                <button key={s.id} onClick={() => { setSelectedStudentId(s.id); setStudentSearch(''); }}
-                  className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all',
-                    selectedStudentId === s.id ? 'bg-blue-50 shadow-[0_0_0_2px_rgba(0,44,152,0.15)]' : 'hover:bg-[var(--card-bg-hover)]')}>
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0">
-                    <span className="text-white text-[0.5625rem] font-bold">{s.firstName[0]}{s.lastName[0]}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[0.75rem] font-semibold text-[var(--text-primary)] truncate">{s.firstName} {s.lastName}</p>
-                    <p className="text-[0.625rem] text-[var(--text-muted)]">{s.admissionNo} &middot; {s.class}-{s.section}</p>
-                  </div>
-                </button>
-              ))}
+              {filteredEnrollments.map((e) => {
+                const name = e.student?.name ?? '';
+                const initials = name.split(' ').map((p) => p[0] ?? '').join('').slice(0, 2).toUpperCase();
+                return (
+                  <button key={e.id} onClick={() => { setSelectedEnrollmentId(e.id); setStudentSearch(''); }}
+                    className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all',
+                      selectedEnrollmentId === e.id ? 'bg-blue-50 shadow-[0_0_0_2px_rgba(0,44,152,0.15)]' : 'hover:bg-[var(--card-bg-hover)]')}>
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0">
+                      <span className="text-white text-[0.5625rem] font-bold">{initials || '?'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[0.75rem] font-semibold text-[var(--text-primary)] truncate">{name}</p>
+                      <p className="text-[0.625rem] text-[var(--text-muted)]">{e.student?.admissionNumber}{e.classSection?.section ? ` · Section ${e.classSection.section}` : ''}</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            {selectedStudent && (
+            {selectedEnrollment && (
               <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-50 text-[0.6875rem] font-semibold text-emerald-700">
-                Selected: {selectedStudent.firstName} {selectedStudent.lastName} ({selectedStudent.admissionNo})
+                Selected: {selectedEnrollment.student?.name} ({selectedEnrollment.student?.admissionNumber})
               </div>
             )}
           </div>
@@ -305,9 +375,9 @@ export default function ManualAdjustmentPage() {
           </div>
 
           {/* Preview */}
-          {selectedStudent && formAmount && (
+          {selectedEnrollment && formAmount && (
             <div className={cn('px-4 py-3 rounded-xl text-[0.75rem] font-medium', formType === 'credit' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600')}>
-              {formType === 'credit' ? 'Credit' : 'Debit'} of {fmt(Number(formAmount))} will be posted to {selectedStudent.firstName} {selectedStudent.lastName}'s ledger as an adjustment entry.
+              {formType === 'credit' ? 'Credit' : 'Debit'} of {fmt(Number(formAmount))} will be posted to {selectedEnrollment.student?.name}'s ledger as an adjustment entry.
             </div>
           )}
         </div>

@@ -2,9 +2,7 @@
  * Expense Posting API — backend-swap point
  * Posts charges (books, uniform, fine, etc.) as debit entries to student ledgers.
  */
-import { ledgerApi } from './ledger.api';
 import { demoStudentsApi } from './students.api';
-import type { LedgerEntry } from '@/types/ledger.types';
 
 const D = 150;
 const delay = <T>(data: T): Promise<T> => new Promise((r) => setTimeout(() => r(data), D));
@@ -44,11 +42,6 @@ let expensesDb: Expense[] = [
   { id: 'exp-8', date: '2026-04-02', category: 'uniform', description: 'PE kit — new session', studentId: 'stu-8', studentName: 'Sneha Joshi', admissionNo: 'ADM-2024-089', class: 'X-B', amount: 950, postedBy: 'Front Desk' },
 ];
 
-const categoryToLedger: Record<ExpenseCategory, LedgerEntry['category']> = {
-  books: 'other', uniform: 'other', transport: 'transport', fine: 'late_fee',
-  activity: 'activity', lab: 'lab', hostel: 'hostel', other: 'other',
-};
-
 export const expenseApi = {
   getExpenses: (): Promise<Expense[]> => delay([...expensesDb]),
 
@@ -56,15 +49,6 @@ export const expenseApi = {
     // Look up student
     const student = await demoStudentsApi.getStudent(dto.studentId);
     const today = new Date().toISOString().split('T')[0];
-
-    // Post debit entry to ledger
-    const ledgerEntry = await ledgerApi.createEntry({
-      studentId: dto.studentId,
-      description: dto.description,
-      type: 'debit',
-      category: categoryToLedger[dto.category],
-      amount: dto.amount,
-    });
 
     const expense: Expense = {
       id: crypto.randomUUID(),
@@ -77,7 +61,6 @@ export const expenseApi = {
       class: `${student.class}-${student.section}`,
       amount: dto.amount,
       postedBy: 'Admin',
-      ledgerEntryId: ledgerEntry.id,
     };
     expensesDb = [expense, ...expensesDb];
     return delay(expense);

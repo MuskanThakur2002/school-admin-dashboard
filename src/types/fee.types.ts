@@ -35,10 +35,54 @@ export interface FeeStructureItem {
 export interface FeeInstallment {
   id: string;
   feeStructureId: string;
+  // Backend returns date-only ("YYYY-MM-DD"). On write, send full ISO datetime.
   dueDate: string;
-  amount: string;
+  // POST returns string ("0"), PUT returns number (2000). Coerce with Number().
+  amount: string | number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateFeeInstallmentDto {
+  feeStructureId: string;
+  dueDate: string;
+  amount: number;
+}
+
+export interface UpdateFeeInstallmentDto {
+  feeStructureId?: string;
+  dueDate?: string;
+  amount?: number;
+}
+
+// ─── Fee Assignment ────────────────────────────────────────
+// Bridge between a StudentEnrollment and a FeeStructure, with per-student
+// concession/scholarship. Backend returns concessionPercent/scholarshipAmount
+// as string from POST but number from PUT — coerce with Number() on read.
+
+export interface FeeAssignment {
+  id: string;
+  studentEnrollmentId: string;
+  feeStructureId: string;
+  concessionPercent: string | number;
+  scholarshipAmount: string | number;
+  createdAt: string;
+  updatedAt: string;
+  feeStructure?: FeeStructure;
+}
+
+export interface CreateFeeAssignmentDto {
+  studentEnrollmentId: string;
+  feeStructureId: string;
+  concessionPercent: number;
+  scholarshipAmount: number;
+}
+
+export interface UpdateFeeAssignmentDto {
+  studentEnrollmentId?: string;
+  feeStructureId?: string;
+  concessionPercent?: number;
+  scholarshipAmount?: number;
 }
 
 export interface FeeStructure {

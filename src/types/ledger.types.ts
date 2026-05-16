@@ -1,19 +1,49 @@
+// ─── Ledger Entry ──────────────────────────────────────────
+// Backend shape from /schools/:schoolId/ledgers. `amount` and
+// `runningBalance` come back as decimal strings — coerce with
+// Number() before doing math. `entryType` is capitalized.
+
+export type LedgerEntryType = 'Debit' | 'Credit';
+
 export interface LedgerEntry {
   id: string;
-  studentId: string;
-  date: string;
-  description: string;
-  type: 'debit' | 'credit';
-  category: 'tuition' | 'transport' | 'exam' | 'lab' | 'library' | 'activity' | 'hostel' | 'other' | 'payment' | 'concession' | 'late_fee' | 'refund' | 'adjustment';
-  amount: number;
-  mode?: string; // 'cash' | 'cheque' | 'upi' | 'neft' | 'dd'
-  reference?: string;
-  balance: number; // running balance after this entry
-  remarks?: string;
-  createdBy: string;
+  studentEnrollmentId: string;
+  academicYearId: string;
+  entryType: LedgerEntryType;
+  category: string;
+  amount: string;
+  runningBalance: string;
+  reference: string;
+  paymentMode: string;
+  remarks: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
+export interface CreateLedgerEntryDto {
+  studentEnrollmentId: string;
+  academicYearId: string;
+  entryType: LedgerEntryType;
+  category: string;
+  amount: number;
+  // We send 0; the backend recomputes the real running balance.
+  runningBalance: number;
+  reference: string;
+  paymentMode: string;
+  remarks: string;
+  createdById: string;
+}
+
+export type UpdateLedgerEntryDto = Partial<Omit<CreateLedgerEntryDto, 'createdById'>>;
+
+// ─── UI-Derived Summary ────────────────────────────────────
+// The backend has no summary endpoint — this is computed client-side
+// from the ledger entries list grouped by studentEnrollmentId.
+export type LedgerStatus = 'clear' | 'partial' | 'overdue' | 'overpaid';
+
 export interface StudentLedgerSummary {
+  studentEnrollmentId: string;
   studentId: string;
   studentName: string;
   admissionNo: string;
@@ -23,30 +53,6 @@ export interface StudentLedgerSummary {
   totalPaid: number;
   balance: number;
   lastPaymentDate: string;
-  status: 'clear' | 'partial' | 'overdue' | 'overpaid';
-  overpaymentAmount: number; // positive when student has excess credit; 0 otherwise
-}
-
-export interface RefundDto {
-  studentId: string;
-  amount: number;
-  mode: string;
-  reference?: string;
-  reason: string;
-}
-
-export interface CreateLedgerEntryDto {
-  studentId: string;
-  description: string;
-  type: 'debit' | 'credit';
-  category: LedgerEntry['category'];
-  amount: number;
-  mode?: string;
-  reference?: string;
-  remarks?: string;
-}
-
-export interface InitializeLedgerDto {
-  studentId: string;
-  feeStructureId: string;
+  status: LedgerStatus;
+  overpaymentAmount: number;
 }

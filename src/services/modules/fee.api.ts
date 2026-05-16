@@ -8,10 +8,12 @@
 import { api } from '@/services/api-client';
 import { format } from 'date-fns';
 import type {
-  FeeHead, FeeStructure, FeeStructureItem,
+  FeeHead, FeeStructure, FeeStructureItem, FeeInstallment, FeeAssignment,
   CreateFeeHeadDto, UpdateFeeHeadDto,
   CreateFeeStructureDto, UpdateFeeStructureDto,
   CreateFeeStructureItemDto, UpdateFeeStructureItemDto,
+  CreateFeeInstallmentDto, UpdateFeeInstallmentDto,
+  CreateFeeAssignmentDto, UpdateFeeAssignmentDto,
   InstallmentPlan, Concession, LateFeeRule,
   CreateInstallmentPlanDto, CreateConcessionDto, CreateLateFeeRuleDto,
 } from '@/types/fee.types';
@@ -36,6 +38,26 @@ export interface PaginationParams {
 
 export interface FeeStructureItemListParams extends PaginationParams {
   feeStructureId?: string;
+}
+
+export interface FeeInstallmentListParams extends PaginationParams {
+  feeStructureId?: string;
+}
+
+export interface FeeAssignmentListParams extends PaginationParams {
+  studentEnrollmentId?: string;
+  feeStructureId?: string;
+}
+
+/**
+ * Backend accepts full ISO datetime on POST/PUT but normalizes the response
+ * to a date-only string ("YYYY-MM-DD"). If a date-only string is supplied,
+ * we expand to UTC midnight before sending; ISO strings pass through.
+ */
+function toIsoDueDate(value: string): string {
+  if (!value) return value;
+  if (value.includes('T')) return value;
+  return new Date(`${value}T00:00:00.000Z`).toISOString();
 }
 
 function buildQuery(params?: object): string {
@@ -209,6 +231,86 @@ export const feeApi = {
   /** DELETE /schools/:schoolId/fee-structure-items/:id */
   deleteItem: async (schoolId: string, id: string): Promise<void> => {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-structure-items/${id}`);
+  },
+
+  // ─── Fee Installments (real backend) ────────────────────
+  /** GET /schools/:schoolId/fee-installments */
+  listInstallments: async (schoolId: string, params?: FeeInstallmentListParams) => {
+    const res = await api.get<PaginatedEnvelope<FeeInstallment>>(
+      `/schools/${schoolId}/fee-installments${buildQuery(params)}`,
+    );
+    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
+  },
+
+  /** POST /schools/:schoolId/fee-installments */
+  createInstallment: async (
+    schoolId: string,
+    body: CreateFeeInstallmentDto,
+  ): Promise<FeeInstallment> => {
+    const res = await api.post<ApiEnvelope<FeeInstallment>>(
+      `/schools/${schoolId}/fee-installments`,
+      { schoolId, ...body, dueDate: toIsoDueDate(body.dueDate) },
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/fee-installments/:id */
+  updateInstallment: async (
+    schoolId: string,
+    id: string,
+    body: UpdateFeeInstallmentDto,
+  ): Promise<FeeInstallment> => {
+    const payload = { schoolId, ...body };
+    if (payload.dueDate) payload.dueDate = toIsoDueDate(payload.dueDate);
+    const res = await api.put<ApiEnvelope<FeeInstallment>>(
+      `/schools/${schoolId}/fee-installments/${id}`,
+      payload,
+    );
+    return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/fee-installments/:id */
+  deleteInstallment: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-installments/${id}`);
+  },
+
+  // ─── Fee Assignments (real backend) ─────────────────────
+  /** GET /schools/:schoolId/fee-assignments */
+  listAssignments: async (schoolId: string, params?: FeeAssignmentListParams) => {
+    const res = await api.get<PaginatedEnvelope<FeeAssignment>>(
+      `/schools/${schoolId}/fee-assignments${buildQuery(params)}`,
+    );
+    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
+  },
+
+  /** POST /schools/:schoolId/fee-assignments */
+  createAssignment: async (
+    schoolId: string,
+    body: CreateFeeAssignmentDto,
+  ): Promise<FeeAssignment> => {
+    const res = await api.post<ApiEnvelope<FeeAssignment>>(
+      `/schools/${schoolId}/fee-assignments`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/fee-assignments/:id */
+  updateAssignment: async (
+    schoolId: string,
+    id: string,
+    body: UpdateFeeAssignmentDto,
+  ): Promise<FeeAssignment> => {
+    const res = await api.put<ApiEnvelope<FeeAssignment>>(
+      `/schools/${schoolId}/fee-assignments/${id}`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/fee-assignments/:id */
+  deleteAssignment: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-assignments/${id}`);
   },
 
   // ─── Installment Plans (mock — Phase 2) ─────────────────

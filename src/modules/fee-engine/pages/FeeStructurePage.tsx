@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Plus, Pencil, Trash2, FileText, IndianRupee, Calendar, ChevronRight, Layers,
+  Plus, Pencil, Trash2, FileText, IndianRupee, Calendar, ChevronRight, Layers, CalendarClock,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
+import { Pagination } from '@/components/ui/Pagination/Pagination';
+import { FeeEngineNav } from '@/modules/fee-engine/components/FeeEngineNav';
 import type { FeeStructure } from '@/types/fee.types';
 
 const fmt = (v: number) =>
@@ -20,6 +22,9 @@ const itemsTotal = (s: FeeStructure): number =>
 
 export default function FeeStructurePage() {
   const structures = useFeeStore((s) => s.structures);
+  const structuresPage = useFeeStore((s) => s.structuresPage);
+  const structuresLimit = useFeeStore((s) => s.structuresLimit);
+  const structuresTotal = useFeeStore((s) => s.structuresTotal);
   const heads = useFeeStore((s) => s.heads);
   const loading = useFeeStore((s) => s.loading);
   const fetchStructures = useFeeStore((s) => s.fetchStructures);
@@ -29,6 +34,8 @@ export default function FeeStructurePage() {
   const deleteStructure = useFeeStore((s) => s.deleteStructure);
   const createItem = useFeeStore((s) => s.createItem);
   const deleteItem = useFeeStore((s) => s.deleteItem);
+  const createInstallment = useFeeStore((s) => s.createInstallment);
+  const deleteInstallment = useFeeStore((s) => s.deleteInstallment);
 
   const years = useAcademicStore((s) => s.years);
   const fetchYears = useAcademicStore((s) => s.fetchYears);
@@ -40,8 +47,11 @@ export default function FeeStructurePage() {
   const [editingStructure, setEditingStructure] = useState<FeeStructure | null>(null);
 
   useEffect(() => {
-    fetchStructures();
-    fetchHeads();
+    fetchStructures(1, 25);
+    // Heads are also used to populate the "Add fee head" dropdown in the
+    // structure detail panel — fetch a generous page so most schools see
+    // everything without paging within the dropdown.
+    fetchHeads(1, 100);
     if (years.length === 0) fetchYears();
   }, [fetchStructures, fetchHeads, fetchYears, years.length]);
 
@@ -80,6 +90,8 @@ export default function FeeStructurePage() {
 
   return (
     <div className="max-w-[1280px]">
+      <FeeEngineNav description="A structure is a bundle of fee heads with amounts, tied to one academic year. It defines what a student owes (line items) and when it's due (installments). Structures get applied to students via assignments." />
+
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -188,6 +200,20 @@ export default function FeeStructurePage() {
         </div>
       )}
 
+      {/* Pagination */}
+      {structuresTotal > 0 && (
+        <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden mb-8">
+          <Pagination
+            page={structuresPage}
+            limit={structuresLimit}
+            total={structuresTotal}
+            onPageChange={(p) => fetchStructures(p, structuresLimit)}
+            onLimitChange={(l) => fetchStructures(1, l)}
+            label="structures"
+          />
+        </div>
+      )}
+
       {/* Detail panel */}
       {selected && (
         <StructureDetail
@@ -212,6 +238,25 @@ export default function FeeStructurePage() {
               showToast({ type: 'info', title: 'Item removed', message: 'Line item deleted' });
             } catch (err) {
               const message = err instanceof Error ? err.message : 'Could not delete item.';
+              showToast({ type: 'error', title: 'Delete failed', message });
+            }
+          }}
+          onAddInstallment={async (dueDate, amount) => {
+            try {
+              await createInstallment({ feeStructureId: selected.id, dueDate, amount });
+              showToast({ type: 'success', title: 'Installment added', message: 'Schedule updated' });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Could not add installment.';
+              showToast({ type: 'error', title: 'Add failed', message });
+              throw err;
+            }
+          }}
+          onDeleteInstallment={async (installmentId) => {
+            try {
+              await deleteInstallment(selected.id, installmentId);
+              showToast({ type: 'info', title: 'Installment removed', message: 'Schedule updated' });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Could not delete installment.';
               showToast({ type: 'error', title: 'Delete failed', message });
             }
           }}
@@ -257,6 +302,8 @@ interface StructureDetailProps {
   onEdit: () => void;
   onAddItem: (feeHeadId: string, amount: number) => Promise<void>;
   onDeleteItem: (itemId: string) => Promise<void>;
+  onAddInstallment: (dueDate: string, amount: number) => Promise<void>;
+  onDeleteInstallment: (installmentId: string) => Promise<void>;
 }
 
 function StructureDetail({
@@ -267,6 +314,8 @@ function StructureDetail({
   onEdit,
   onAddItem,
   onDeleteItem,
+  onAddInstallment,
+  onDeleteInstallment,
 }: StructureDetailProps) {
   const [headId, setHeadId] = useState('');
   const [amount, setAmount] = useState('');
@@ -399,7 +448,132 @@ function StructureDetail({
           <p className="text-[0.6875rem] text-[var(--text-ghost)] mt-2">No fee heads exist yet — create some in the Fee Heads page first.</p>
         )}
       </div>
+
+      {/* Schedule section */}
+      <InstallmentSection
+        installments={structure.feeInstallments}
+        onAdd={onAddInstallment}
+        onDelete={onDeleteInstallment}
+      />
     </div>
+  );
+}
+
+// ─── Installments section ─────────────────────────────────────
+
+interface InstallmentSectionProps {
+  installments: FeeStructure['feeInstallments'];
+  onAdd: (dueDate: string, amount: number) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}
+
+function InstallmentSection({ installments, onAdd, onDelete }: InstallmentSectionProps) {
+  const [dueDate, setDueDate] = useState('');
+  const [amount, setAmount] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  // Chronological order — backend doesn't guarantee one.
+  const sorted = useMemo(
+    () => [...installments].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    [installments],
+  );
+  const total = sorted.reduce((s, i) => s + Number(i.amount || 0), 0);
+
+  const handleAdd = async () => {
+    const numAmount = Number(amount);
+    if (!dueDate || Number.isNaN(numAmount) || adding) return;
+    setAdding(true);
+    try {
+      await onAdd(dueDate, numAmount);
+      setDueDate('');
+      setAmount('');
+    } catch {
+      // toast already shown by parent
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
+          <h3 className="text-[0.875rem] font-bold text-[var(--text-primary)]">Schedule</h3>
+          <span className="text-[0.75rem] text-[var(--text-muted)]">
+            &middot; {sorted.length} {sorted.length === 1 ? 'installment' : 'installments'}
+          </span>
+        </div>
+        {sorted.length > 0 && (
+          <span className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">
+            Total: {fmt(total)}
+          </span>
+        )}
+      </div>
+
+      {/* Table header */}
+      <div className="grid grid-cols-[2fr_1.5fr_0.4fr] gap-4 px-6 py-3 bg-[var(--card-bg-hover)]">
+        <span className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">Due Date</span>
+        <span className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] text-right">Amount</span>
+        <span />
+      </div>
+
+      {/* Rows */}
+      {sorted.length === 0 ? (
+        <div className="px-6 py-8 text-center">
+          <p className="text-[0.8125rem] text-[var(--text-muted)]">No installments scheduled yet.</p>
+          <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">Add one below to define when payments are due.</p>
+        </div>
+      ) : (
+        sorted.map((inst, idx) => (
+          <div
+            key={inst.id}
+            className={cn(
+              'grid grid-cols-[2fr_1.5fr_0.4fr] gap-4 items-center px-6 py-3.5',
+              idx < sorted.length - 1 && 'border-b border-[var(--border-subtle)]',
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-[var(--text-muted)]" strokeWidth={2} />
+              <span className="text-[0.8125rem] text-[var(--text-secondary)]">{inst.dueDate}</span>
+            </div>
+            <span className="font-display text-[0.875rem] font-bold text-[var(--text-primary)] text-right">
+              {fmt(Number(inst.amount || 0))}
+            </span>
+            <button
+              onClick={() => onDelete(inst.id)}
+              className="p-1.5 rounded-md text-[var(--text-ghost)] hover:text-red-500 hover:bg-red-50 transition-colors justify-self-end"
+              aria-label="Remove installment"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))
+      )}
+
+      {/* Add installment row */}
+      <div className="px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--card-bg-hover)]">
+        <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Add installment</p>
+        <div className="grid grid-cols-[2fr_1.5fr_auto] gap-3 items-end">
+          <Input
+            label="Due Date"
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+          <Input
+            label="Amount (INR)"
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+          />
+          <Button onClick={handleAdd} loading={adding} disabled={!dueDate || amount === ''}>
+            Add
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 

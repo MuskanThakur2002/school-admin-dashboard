@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Phone, Mail, Search, X, MessageSquare, ArrowUpRight,
   Globe, UserPlus, Megaphone, Users, ArrowRight, Trash2, CheckCircle2,
-  UserPlus2, MoreHorizontal,
+  UserPlus2, MoreHorizontal, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
@@ -56,6 +56,9 @@ export default function EnquiryListPage() {
   const updateEnquiryStatus = useAdmissionsStore((s) => s.updateEnquiryStatus);
   const deleteEnquiry = useAdmissionsStore((s) => s.deleteEnquiry);
   const convertEnquiry = useAdmissionsStore((s) => s.convertEnquiryToApplication);
+  const total = useAdmissionsStore((s) => s.enquiriesTotal);
+  const page = useAdmissionsStore((s) => s.enquiriesPage);
+  const limit = useAdmissionsStore((s) => s.enquiriesLimit);
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
@@ -83,9 +86,13 @@ export default function EnquiryListPage() {
   const [formNotes, setFormNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Server-side search + initial fetch. Debounced so we don't hammer the API on keystrokes.
   useEffect(() => {
-    if (enquiries.length === 0) fetchEnquiries();
-  }, [enquiries.length, fetchEnquiries]);
+    const t = setTimeout(() => {
+      fetchEnquiries(1, limit, search.trim() || undefined);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, limit, fetchEnquiries]);
 
   useEffect(() => {
     if (academicYears.length === 0) fetchYears();
@@ -319,7 +326,32 @@ export default function EnquiryListPage() {
         })}
 
         <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filtered.length} of {enquiries.length} enquiries</p>
+          <p className="text-[0.75rem] text-[var(--text-muted)]">
+            {filtered.length === enquiries.length
+              ? `Showing ${enquiries.length} of ${total} enquiries`
+              : `${filtered.length} matching · ${enquiries.length} on this page · ${total} total`}
+          </p>
+          {total > limit && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchEnquiries(page - 1, limit, search.trim() || undefined)}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-[0.75rem] font-semibold text-[var(--text-tertiary)] px-2">
+                Page {page} of {Math.max(1, Math.ceil(total / limit))}
+              </span>
+              <button
+                onClick={() => fetchEnquiries(page + 1, limit, search.trim() || undefined)}
+                disabled={page >= Math.ceil(total / limit)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

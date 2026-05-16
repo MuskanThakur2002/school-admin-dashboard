@@ -3,113 +3,148 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Download, ArrowUpRight, ArrowDownRight, Loader2, X, RotateCcw } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useLedgerStore } from '@/stores/ledger.store';
-import { useDemoStudentsStore } from '@/stores/students.store';
+import { useEnrollmentStore } from '@/stores/enrollment.store';
+import { useAcademicStore } from '@/stores/academic.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
-import type { DemoStudent } from '@/types/student.types';
-import type { LedgerEntry } from '@/types/ledger.types';
+import type { StudentEnrollment } from '@/types/student.types';
 
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
 const paymentModes = ['cash', 'cheque', 'upi', 'neft', 'dd'] as const;
-const paymentCategories: LedgerEntry['category'][] = ['payment', 'concession', 'refund'];
+const paymentCategories = ['payment', 'concession', 'refund'] as const;
 
 export default function StudentLedgerPage() {
-  const { studentId } = useParams<{ studentId: string }>();
+  const { enrollmentId } = useParams<{ enrollmentId: string }>();
   const navigate = useNavigate();
-  const { entries, loading, fetchStudentLedger, postPayment, processRefund } = useLedgerStore();
-  const getStudent = useDemoStudentsStore((s) => s.getStudent);
+  const entries = useLedgerStore((s) => s.entries);
+  const loading = useLedgerStore((s) => s.loading);
+  const fetchEnrollmentLedger = useLedgerStore((s) => s.fetchEnrollmentLedger);
+  const createEntry = useLedgerStore((s) => s.createEntry);
+  const getEnrollment = useEnrollmentStore((s) => s.getEnrollment);
+  const years = useAcademicStore((s) => s.years);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const userId = useAuthStore((s) => s.user?.id);
   const showToast = useUIStore((s) => s.showToast);
 
-  const [student, setStudent] = useState<DemoStudent | null>(null);
-  const [studentError, setStudentError] = useState(false);
+  const [enrollment, setEnrollment] = useState<StudentEnrollment | null>(null);
+  const [enrollmentError, setEnrollmentError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [posting, setPosting] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refunding, setRefunding] = useState(false);
 
-  // Payment form state
   const [payAmount, setPayAmount] = useState('');
   const [payMode, setPayMode] = useState('cash');
-  const [payCategory, setPayCategory] = useState<LedgerEntry['category']>('payment');
+  const [payCategory, setPayCategory] = useState<typeof paymentCategories[number]>('payment');
   const [payRef, setPayRef] = useState('');
   const [payRemarks, setPayRemarks] = useState('');
 
-  // Refund form state
   const [refundAmount, setRefundAmount] = useState('');
   const [refundMode, setRefundMode] = useState('neft');
   const [refundRef, setRefundRef] = useState('');
   const [refundReason, setRefundReason] = useState('');
 
   useEffect(() => {
-    if (!studentId) return;
-    fetchStudentLedger(studentId);
-    getStudent(studentId).then(setStudent).catch(() => setStudentError(true));
-  }, [studentId, fetchStudentLedger, getStudent]);
+    if (years.length === 0) fetchYears();
+  }, [years.length, fetchYears]);
 
-  const totalDebits = entries.filter((e) => e.type === 'debit').reduce((s, e) => s + e.amount, 0);
-  const totalCredits = entries.filter((e) => e.type === 'credit').reduce((s, e) => s + e.amount, 0);
+  useEffect(() => {
+    if (!enrollmentId) return;
+    fetchEnrollmentLedger(enrollmentId);
+    getEnrollment(enrollmentId).then(setEnrollment).catch(() => setEnrollmentError(true));
+  }, [enrollmentId, fetchEnrollmentLedger, getEnrollment]);
+
+  const activeYearId = enrollment?.academicYearId
+    ?? years.find((y) => y.isCurrent)?.id
+    ?? years[0]?.id;
+
+  const totalDebits = entries.filter((e) => e.entryType === 'Debit').reduce((s, e) => s + Number(e.amount), 0);
+  const totalCredits = entries.filter((e) => e.entryType === 'Credit').reduce((s, e) => s + Number(e.amount), 0);
   const currentBalance = totalDebits - totalCredits;
   const isOverpaid = currentBalance < 0;
   const overpaymentAmount = isOverpaid ? Math.abs(currentBalance) : 0;
 
-  const initials = student
-    ? `${student.firstName[0] || ''}${student.lastName[0] || ''}`.toUpperCase()
+  const studentName = enrollment?.student?.name ?? '';
+  const initials = studentName
+    ? studentName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase()
     : '';
 
+  const resetPayForm = () => {
+    setPayAmount('');
+    setPayMode('cash');
+    setPayCategory('payment');
+    setPayRef('');
+    setPayRemarks('');
+  };
+
   const handlePostPayment = async () => {
-    if (!studentId || !payAmount || Number(payAmount) <= 0) return;
+    if (!enrollmentId || !activeYearId || !userId) {
+      showToast({ type: 'error', title: 'Cannot post', message: 'Missing enrollment, year, or user context' });
+      return;
+    }
+    if (!payAmount || Number(payAmount) <= 0) return;
     setPosting(true);
     try {
-      await postPayment({
-        studentId,
-        description: `Payment received — ${payMode.toUpperCase()}`,
-        type: 'credit',
+      await createEntry({
+        studentEnrollmentId: enrollmentId,
+        academicYearId: activeYearId,
+        entryType: 'Credit',
         category: payCategory,
         amount: Number(payAmount),
-        mode: payMode,
-        reference: payRef || undefined,
-        remarks: payRemarks || undefined,
+        runningBalance: 0,
+        reference: payRef,
+        paymentMode: payMode,
+        remarks: payRemarks,
+        createdById: userId,
       });
+      await fetchEnrollmentLedger(enrollmentId);
       showToast({ type: 'success', title: 'Payment posted', message: `${fmt(Number(payAmount))} recorded successfully` });
       setShowModal(false);
-      setPayAmount('');
-      setPayMode('cash');
-      setPayCategory('payment');
-      setPayRef('');
-      setPayRemarks('');
-    } catch {
-      showToast({ type: 'error', title: 'Payment failed', message: 'Could not post payment. Please try again.' });
+      resetPayForm();
+    } catch (err) {
+      showToast({ type: 'error', title: 'Payment failed', message: (err as Error).message });
     } finally {
       setPosting(false);
     }
   };
 
   const handleProcessRefund = async () => {
-    if (!studentId || !refundAmount || Number(refundAmount) <= 0 || !refundReason) return;
+    if (!enrollmentId || !activeYearId || !userId) {
+      showToast({ type: 'error', title: 'Cannot post', message: 'Missing enrollment, year, or user context' });
+      return;
+    }
+    if (!refundAmount || Number(refundAmount) <= 0 || !refundReason) return;
     if (Number(refundAmount) > overpaymentAmount) return;
     setRefunding(true);
     try {
-      await processRefund({
-        studentId,
+      await createEntry({
+        studentEnrollmentId: enrollmentId,
+        academicYearId: activeYearId,
+        entryType: 'Debit',
+        category: 'refund',
         amount: Number(refundAmount),
-        mode: refundMode,
-        reference: refundRef || undefined,
-        reason: refundReason,
+        runningBalance: 0,
+        reference: refundRef,
+        paymentMode: refundMode,
+        remarks: refundReason,
+        createdById: userId,
       });
+      await fetchEnrollmentLedger(enrollmentId);
       showToast({ type: 'success', title: 'Refund processed', message: `${fmt(Number(refundAmount))} refunded successfully` });
       setShowRefundModal(false);
       setRefundAmount('');
       setRefundMode('neft');
       setRefundRef('');
       setRefundReason('');
-    } catch {
-      showToast({ type: 'error', title: 'Refund failed', message: 'Could not process refund. Please try again.' });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Refund failed', message: (err as Error).message });
     } finally {
       setRefunding(false);
     }
   };
 
-  if (loading && entries.length === 0) {
+  if (loading && entries.length === 0 && !enrollment) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
@@ -117,18 +152,21 @@ export default function StudentLedgerPage() {
     );
   }
 
-  if (studentError) {
+  if (enrollmentError) {
     return (
       <div className="max-w-[1280px]">
         <button onClick={() => navigate('/ledger')} className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors mb-6">
           <ArrowLeft className="w-4 h-4" /> Back to Ledger
         </button>
         <div className="bg-[var(--card-bg)] rounded-2xl p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
-          <p className="text-[var(--text-muted)] text-[0.875rem]">Student not found or no ledger entries exist.</p>
+          <p className="text-[var(--text-muted)] text-[0.875rem]">Enrollment not found.</p>
         </div>
       </div>
     );
   }
+
+  const admissionNo = enrollment?.student?.admissionNumber ?? '';
+  const section = enrollment?.classSection?.section ?? '';
 
   return (
     <div className="max-w-[1280px]">
@@ -140,14 +178,14 @@ export default function StudentLedgerPage() {
       <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
         <div className="flex flex-col md:flex-row md:items-center gap-5">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0 shadow-[0_4px_12px_rgba(0,44,152,0.25)]">
-            <span className="font-display text-[1.25rem] font-extrabold text-white">{initials}</span>
+            <span className="font-display text-[1.25rem] font-extrabold text-white">{initials || '—'}</span>
           </div>
           <div className="flex-1">
             <h1 className="font-display text-[1.375rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">
-              {student ? `${student.firstName} ${student.lastName}` : 'Loading...'}
+              {studentName || 'Loading...'}
             </h1>
             <p className="text-[0.8125rem] text-[var(--text-tertiary)]">
-              {student ? `${student.admissionNo} \u00b7 Class ${student.class}-${student.section}` : ''}
+              {admissionNo ? `${admissionNo}${section ? ` · Section ${section}` : ''}` : ''}
             </p>
           </div>
           <div className="flex gap-3">
@@ -189,23 +227,30 @@ export default function StudentLedgerPage() {
           ))}
         </div>
 
-        {entries.map((entry, idx) => (
-          <div key={entry.id} className={cn('grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 items-center px-6 py-3.5 hover:bg-[var(--card-bg-hover)] transition-colors',
-            idx < entries.length - 1 && 'border-b border-[var(--border-subtle)]')}>
-            <span className="text-[0.75rem] text-[var(--text-muted)]">{entry.date}</span>
-            <div className="min-w-0">
-              <p className="text-[0.8125rem] text-[var(--text-secondary)] truncate">{entry.description}</p>
-              {entry.reference && <p className="text-[0.625rem] text-[var(--text-ghost)]">Ref: {entry.reference}</p>}
+        {entries.map((entry, idx) => {
+          const isDebit = entry.entryType === 'Debit';
+          const amount = Number(entry.amount);
+          const balance = Number(entry.runningBalance);
+          const date = entry.createdAt.slice(0, 10);
+          const description = entry.remarks || entry.category;
+          return (
+            <div key={entry.id} className={cn('grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 items-center px-6 py-3.5 hover:bg-[var(--card-bg-hover)] transition-colors',
+              idx < entries.length - 1 && 'border-b border-[var(--border-subtle)]')}>
+              <span className="text-[0.75rem] text-[var(--text-muted)]">{date}</span>
+              <div className="min-w-0">
+                <p className="text-[0.8125rem] text-[var(--text-secondary)] truncate">{description}</p>
+                {entry.reference && <p className="text-[0.625rem] text-[var(--text-ghost)]">Ref: {entry.reference}</p>}
+              </div>
+              <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md w-fit', isDebit ? 'bg-red-50' : 'bg-emerald-50')}>
+                {isDebit ? <ArrowUpRight className="w-3 h-3 text-red-500" /> : <ArrowDownRight className="w-3 h-3 text-emerald-600" />}
+                <span className={cn('text-[0.625rem] font-bold', isDebit ? 'text-red-500' : 'text-emerald-600')}>{isDebit ? 'DR' : 'CR'}</span>
+              </div>
+              <span className="font-display text-[0.8125rem] font-bold text-red-500">{isDebit ? fmt(amount) : '—'}</span>
+              <span className="font-display text-[0.8125rem] font-bold text-emerald-600">{!isDebit ? fmt(amount) : '—'}</span>
+              <span className={cn('font-display text-[0.8125rem] font-bold', balance > 0 ? 'text-[var(--text-primary)]' : balance < 0 ? 'text-blue-600' : 'text-emerald-600')}>{balance < 0 ? `(${fmt(Math.abs(balance))})` : fmt(balance)}</span>
             </div>
-            <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md w-fit', entry.type === 'debit' ? 'bg-red-50' : 'bg-emerald-50')}>
-              {entry.type === 'debit' ? <ArrowUpRight className="w-3 h-3 text-red-500" /> : <ArrowDownRight className="w-3 h-3 text-emerald-600" />}
-              <span className={cn('text-[0.625rem] font-bold', entry.type === 'debit' ? 'text-red-500' : 'text-emerald-600')}>{entry.type === 'debit' ? 'DR' : 'CR'}</span>
-            </div>
-            <span className="font-display text-[0.8125rem] font-bold text-red-500">{entry.type === 'debit' ? fmt(entry.amount) : '\u2014'}</span>
-            <span className="font-display text-[0.8125rem] font-bold text-emerald-600">{entry.type === 'credit' ? fmt(entry.amount) : '\u2014'}</span>
-            <span className={cn('font-display text-[0.8125rem] font-bold', entry.balance > 0 ? 'text-[var(--text-primary)]' : entry.balance < 0 ? 'text-blue-600' : 'text-emerald-600')}>{entry.balance < 0 ? `(${fmt(Math.abs(entry.balance))})` : fmt(entry.balance)}</span>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Totals */}
         <div className="grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 px-6 py-4 bg-[var(--card-bg-hover)]">
@@ -242,9 +287,9 @@ export default function StudentLedgerPage() {
                 </div>
                 <div>
                   <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Category</label>
-                  <select value={payCategory} onChange={(e) => setPayCategory(e.target.value as LedgerEntry['category'])}
+                  <select value={payCategory} onChange={(e) => setPayCategory(e.target.value as typeof paymentCategories[number])}
                     className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow">
-                    {paymentCategories.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1).replace('_', ' ')}</option>)}
+                    {paymentCategories.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
                   </select>
                 </div>
               </div>

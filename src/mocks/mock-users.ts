@@ -18,6 +18,8 @@ const allPermissions = [
   'teachers.write',
   'attendance.read',
   'attendance.write',
+  'homework.read',
+  'homework.write',
   'parents.read',
   'parents.write',
   'fees.read',

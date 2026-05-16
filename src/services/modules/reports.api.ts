@@ -1,8 +1,12 @@
 /**
  * Reports API Layer — generates report data from existing mock data sources.
  * Backend-swap point: replace each generator with a single API call.
+ *
+ * The 4 ledger-backed reports below (dues, class-wise, defaulters, ageing)
+ * currently return empty rows. The old mock `getLedgerSummaries` was removed
+ * when the ledger module went real; reports needs its own backend-scoped
+ * fetch (school + active year) before these can be rebuilt.
  */
-import { ledgerApi } from './ledger.api';
 import { receiptApi } from './receipt.api';
 import { expenseApi } from './expense.api';
 import { applicationsApi } from './applications.api';
@@ -41,11 +45,13 @@ const fmt = (v: number) =>
 
 const now = () => new Date().toISOString();
 
-// ─── 1. Student-wise Dues ──────────────────────────────────
-async function studentWiseDues(): Promise<ReportResult> {
-  const summaries = await ledgerApi.getLedgerSummaries();
-  const withDues = summaries.filter((s) => s.balance > 0);
+// ─── 1-4. Ledger-backed reports (placeholder) ──────────────
+// These four reports used to derive rows from `ledgerApi.getLedgerSummaries`.
+// The ledger module now talks to a real backend that doesn't expose a
+// summary endpoint, so the rows are empty until reports gets rewired to
+// fetch ledger entries scoped by school + active year and aggregate them.
 
+async function studentWiseDues(): Promise<ReportResult> {
   return {
     reportId: '1',
     title: 'Student-wise Dues',
@@ -60,50 +66,17 @@ async function studentWiseDues(): Promise<ReportResult> {
       { key: 'status', label: 'Status' },
       { key: 'lastPaymentDate', label: 'Last Payment' },
     ],
-    rows: withDues.map((s) => ({
-      admissionNo: s.admissionNo,
-      studentName: s.studentName,
-      class: `${s.class}-${s.section}`,
-      totalDue: s.totalDue,
-      totalPaid: s.totalPaid,
-      balance: s.balance,
-      status: s.status,
-      lastPaymentDate: s.lastPaymentDate || '—',
-    })),
+    rows: [],
     summary: [
-      { label: 'Students with Dues', value: withDues.length },
-      { label: 'Total Outstanding', value: fmt(withDues.reduce((s, r) => s + r.balance, 0)) },
-      { label: 'Total Billed', value: fmt(withDues.reduce((s, r) => s + r.totalDue, 0)) },
-      { label: 'Total Collected', value: fmt(withDues.reduce((s, r) => s + r.totalPaid, 0)) },
+      { label: 'Students with Dues', value: 0 },
+      { label: 'Total Outstanding', value: fmt(0) },
+      { label: 'Total Billed', value: fmt(0) },
+      { label: 'Total Collected', value: fmt(0) },
     ],
   };
 }
 
-// ─── 2. Class-wise Collection ──────────────────────────────
 async function classWiseCollection(): Promise<ReportResult> {
-  const summaries = await ledgerApi.getLedgerSummaries();
-
-  const classMap = new Map<string, { due: number; paid: number; count: number }>();
-  for (const s of summaries) {
-    const cls = s.class || 'Unknown';
-    const prev = classMap.get(cls) || { due: 0, paid: 0, count: 0 };
-    classMap.set(cls, { due: prev.due + s.totalDue, paid: prev.paid + s.totalPaid, count: prev.count + 1 });
-  }
-
-  const rows = [...classMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([cls, v]) => ({
-      class: cls,
-      students: v.count,
-      totalDue: v.due,
-      totalCollected: v.paid,
-      outstanding: v.due - v.paid,
-      collectionRate: v.due > 0 ? `${Math.round((v.paid / v.due) * 100)}%` : '—',
-    }));
-
-  const totalDue = summaries.reduce((s, r) => s + r.totalDue, 0);
-  const totalPaid = summaries.reduce((s, r) => s + r.totalPaid, 0);
-
   return {
     reportId: '2',
     title: 'Class-wise Collection',
@@ -116,21 +89,17 @@ async function classWiseCollection(): Promise<ReportResult> {
       { key: 'outstanding', label: 'Outstanding', align: 'right' },
       { key: 'collectionRate', label: 'Collection %', align: 'right' },
     ],
-    rows,
+    rows: [],
     summary: [
-      { label: 'Classes', value: classMap.size },
-      { label: 'Total Students', value: summaries.length },
-      { label: 'Total Collected', value: fmt(totalPaid) },
-      { label: 'Overall Collection Rate', value: totalDue > 0 ? `${Math.round((totalPaid / totalDue) * 100)}%` : '—' },
+      { label: 'Classes', value: 0 },
+      { label: 'Total Students', value: 0 },
+      { label: 'Total Collected', value: fmt(0) },
+      { label: 'Overall Collection Rate', value: '—' },
     ],
   };
 }
 
-// ─── 3. Fee Defaulter List ─────────────────────────────────
 async function feeDefaulterList(): Promise<ReportResult> {
-  const summaries = await ledgerApi.getLedgerSummaries();
-  const defaulters = summaries.filter((s) => s.status === 'overdue');
-
   return {
     reportId: '3',
     title: 'Fee Defaulter List',
@@ -144,55 +113,16 @@ async function feeDefaulterList(): Promise<ReportResult> {
       { key: 'balance', label: 'Overdue Amount', align: 'right' },
       { key: 'lastPaymentDate', label: 'Last Payment' },
     ],
-    rows: defaulters.map((s) => ({
-      admissionNo: s.admissionNo,
-      studentName: s.studentName,
-      class: `${s.class}-${s.section}`,
-      totalDue: s.totalDue,
-      totalPaid: s.totalPaid,
-      balance: s.balance,
-      lastPaymentDate: s.lastPaymentDate || 'Never',
-    })),
+    rows: [],
     summary: [
-      { label: 'Defaulters', value: defaulters.length },
-      { label: 'Total Overdue', value: fmt(defaulters.reduce((s, r) => s + r.balance, 0)) },
-      { label: '% of Students', value: summaries.length > 0 ? `${Math.round((defaulters.length / summaries.length) * 100)}%` : '—' },
+      { label: 'Defaulters', value: 0 },
+      { label: 'Total Overdue', value: fmt(0) },
+      { label: '% of Students', value: '—' },
     ],
   };
 }
 
-// ─── 4. Collection Ageing ──────────────────────────────────
 async function collectionAgeing(): Promise<ReportResult> {
-  const summaries = await ledgerApi.getLedgerSummaries();
-  const today = new Date();
-  const withDues = summaries.filter((s) => s.balance > 0);
-
-  const buckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
-  const bucketRows: Record<string, typeof withDues> = { '0-30': [], '31-60': [], '61-90': [], '90+': [] };
-
-  for (const s of withDues) {
-    const lastPay = s.lastPaymentDate ? new Date(s.lastPaymentDate) : new Date('2025-01-01');
-    const days = Math.floor((today.getTime() - lastPay.getTime()) / (1000 * 60 * 60 * 24));
-    const bucket = days <= 30 ? '0-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : '90+';
-    buckets[bucket] += s.balance;
-    bucketRows[bucket].push(s);
-  }
-
-  const rows = withDues.map((s) => {
-    const lastPay = s.lastPaymentDate ? new Date(s.lastPaymentDate) : new Date('2025-01-01');
-    const days = Math.floor((today.getTime() - lastPay.getTime()) / (1000 * 60 * 60 * 24));
-    const bucket = days <= 30 ? '0-30 days' : days <= 60 ? '31-60 days' : days <= 90 ? '61-90 days' : '90+ days';
-    return {
-      admissionNo: s.admissionNo,
-      studentName: s.studentName,
-      class: `${s.class}-${s.section}`,
-      balance: s.balance,
-      daysSincePayment: days,
-      bucket,
-      lastPaymentDate: s.lastPaymentDate || 'Never',
-    };
-  }).sort((a, b) => b.daysSincePayment - a.daysSincePayment);
-
   return {
     reportId: '4',
     title: 'Collection Ageing',
@@ -206,12 +136,12 @@ async function collectionAgeing(): Promise<ReportResult> {
       { key: 'bucket', label: 'Ageing Bucket' },
       { key: 'lastPaymentDate', label: 'Last Payment' },
     ],
-    rows,
+    rows: [],
     summary: [
-      { label: '0-30 Days', value: fmt(buckets['0-30']) },
-      { label: '31-60 Days', value: fmt(buckets['31-60']) },
-      { label: '61-90 Days', value: fmt(buckets['61-90']) },
-      { label: '90+ Days', value: fmt(buckets['90+']) },
+      { label: '0-30 Days', value: fmt(0) },
+      { label: '31-60 Days', value: fmt(0) },
+      { label: '61-90 Days', value: fmt(0) },
+      { label: '90+ Days', value: fmt(0) },
     ],
   };
 }

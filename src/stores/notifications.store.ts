@@ -1,39 +1,33 @@
 /**
  * Notifications Store
- * Templates, triggers, and delivery logs.
- * For now these use local mock data — when the backend exists,
- * this would call a notifications API.
+ *
+ * Templates + notifications come from the backend (see notifications.api.ts).
+ * Triggers are still mock-only — no backend endpoint exists for them yet.
  */
 import { create } from 'zustand';
+import {
+  notificationsApi,
+  notificationTemplatesApi,
+} from '@/services/modules/notifications.api';
+import { useAuthStore } from '@/stores/auth.store';
+import { isSuperAdmin } from '@/types/auth.types';
+import type {
+  CreateNotificationDto,
+  CreateNotificationTemplateDto,
+  Notification,
+  NotificationTemplate,
+  UpdateNotificationDto,
+} from '@/types/notification.types';
 
-// ─── Types ─────────────────────────────────────────────────
-export type NotificationChannel = 'sms' | 'email' | 'push';
-
-export interface NotificationTemplate {
-  id: string; name: string; channel: NotificationChannel;
-  subject?: string; body: string; variables: string[]; lastUsed?: string;
-}
-
+// ─── Triggers (mock-only — no backend) ─────────────────────
 export interface NotificationTrigger {
-  id: string; event: string; description: string;
-  template: string; channels: string[]; enabled: boolean;
+  id: string;
+  event: string;
+  description: string;
+  template: string;
+  channels: string[];
+  enabled: boolean;
 }
-
-export interface DeliveryLog {
-  id: string; date: string; time: string; recipient: string;
-  channel: NotificationChannel; template: string;
-  status: 'delivered' | 'failed' | 'pending'; error?: string;
-}
-
-// ─── Seed data ─────────────────────────────────────────────
-const seedTemplates: NotificationTemplate[] = [
-  { id: 't1', name: 'Fee Due Reminder', channel: 'sms', body: 'Dear {{parent_name}}, fee of {{amount}} for {{student_name}} ({{class}}) is due on {{due_date}}.', variables: ['parent_name', 'amount', 'student_name', 'class', 'due_date'], lastUsed: '2026-04-10' },
-  { id: 't2', name: 'Payment Confirmation', channel: 'sms', body: 'Payment of {{amount}} received for {{student_name}}. Receipt No: {{receipt_no}}.', variables: ['amount', 'student_name', 'receipt_no'], lastUsed: '2026-04-10' },
-  { id: 't3', name: 'Admission Approved', channel: 'email', subject: 'Admission Confirmed — {{school_name}}', body: 'Dear {{parent_name}}, {{student_name}} has been admitted to {{class}}.', variables: ['parent_name', 'student_name', 'class', 'school_name'], lastUsed: '2026-04-09' },
-  { id: 't4', name: 'Attendance Alert', channel: 'push', body: '{{student_name}} was marked absent today ({{date}})', variables: ['student_name', 'date'], lastUsed: '2026-04-10' },
-  { id: 't5', name: 'Exam Schedule', channel: 'email', subject: 'Exam Schedule — {{term}}', body: 'Please find the exam schedule for {{term}} attached. Exams start on {{start_date}}.', variables: ['term', 'start_date'], lastUsed: '2026-03-20' },
-  { id: 't6', name: 'Fee Overdue Warning', channel: 'sms', body: 'URGENT: Fee of {{amount}} for {{student_name}} is overdue by {{days}} days.', variables: ['amount', 'student_name', 'days'] },
-];
 
 const seedTriggers: NotificationTrigger[] = [
   { id: 'tr1', event: 'fee_due', description: 'When a fee installment due date arrives', template: 'Fee Due Reminder', channels: ['sms', 'push'], enabled: true },
@@ -44,71 +38,220 @@ const seedTriggers: NotificationTrigger[] = [
   { id: 'tr6', event: 'exam_scheduled', description: 'When exam schedule is published', template: 'Exam Schedule', channels: ['email', 'push'], enabled: false },
 ];
 
-const seedLogs: DeliveryLog[] = [
-  { id: 'dl1', date: '2026-04-11', time: '09:30', recipient: 'Rajesh Patel (9876543210)', channel: 'sms', template: 'Fee Due Reminder', status: 'delivered' },
-  { id: 'dl2', date: '2026-04-11', time: '09:30', recipient: 'Vikram Sharma (9876543211)', channel: 'sms', template: 'Fee Due Reminder', status: 'delivered' },
-  { id: 'dl3', date: '2026-04-11', time: '09:31', recipient: 'Sunil Gupta (9876543212)', channel: 'sms', template: 'Fee Due Reminder', status: 'failed', error: 'Invalid phone number' },
-  { id: 'dl4', date: '2026-04-10', time: '14:15', recipient: 'neha.k@email.com', channel: 'email', template: 'Admission Approved', status: 'delivered' },
-  { id: 'dl5', date: '2026-04-10', time: '11:00', recipient: 'Arjun Patel (Push)', channel: 'push', template: 'Attendance Alert', status: 'delivered' },
-  { id: 'dl6', date: '2026-04-10', time: '11:00', recipient: 'Kabir Singh (Push)', channel: 'push', template: 'Attendance Alert', status: 'pending' },
-  { id: 'dl7', date: '2026-04-09', time: '16:45', recipient: 'Harpreet Singh (9876543214)', channel: 'sms', template: 'Payment Confirmation', status: 'delivered' },
-  { id: 'dl8', date: '2026-04-09', time: '10:20', recipient: 'amit.d@email.com', channel: 'email', template: 'Fee Overdue Warning', status: 'failed', error: 'Mailbox full' },
-  { id: 'dl9', date: '2026-04-08', time: '08:00', recipient: 'All Parents (Push)', channel: 'push', template: 'Exam Schedule', status: 'delivered' },
-];
+// ─── Helpers ───────────────────────────────────────────────
+function resolveSchoolId(): string {
+  const { user, activeSchoolId } = useAuthStore.getState();
+  const id = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+  if (!id) throw new Error('No active school selected');
+  return id;
+}
+
+function resolveSchoolIdOptional(): string | null {
+  const { user, activeSchoolId } = useAuthStore.getState();
+  return isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+}
+
+const DEFAULT_LIMIT = 50;
 
 // ─── Store ─────────────────────────────────────────────────
 interface NotificationsState {
+  // Templates
   templates: NotificationTemplate[];
+  templatesTotal: number;
+  templatesPage: number;
+  templatesLimit: number;
+  templatesLoading: boolean;
+  templatesError: string | null;
+
+  // Notifications (delivery records)
+  notifications: Notification[];
+  notificationsTotal: number;
+  notificationsPage: number;
+  notificationsLimit: number;
+  notificationsLoading: boolean;
+  notificationsError: string | null;
+
+  // Triggers (mock)
   triggers: NotificationTrigger[];
-  logs: DeliveryLog[];
-  loading: boolean;
+  triggersLoading: boolean;
 
-  fetchTemplates: () => Promise<void>;
-  createTemplate: (t: Omit<NotificationTemplate, 'id'>) => void;
-  deleteTemplate: (id: string) => void;
+  // Templates actions
+  fetchTemplates: (page?: number, limit?: number) => Promise<void>;
+  createTemplate: (body: CreateNotificationTemplateDto) => Promise<NotificationTemplate>;
+  deleteTemplate: (id: string) => Promise<void>;
 
+  // Notifications actions
+  fetchNotifications: (page?: number, limit?: number) => Promise<void>;
+  getNotification: (id: string) => Promise<Notification>;
+  createNotification: (body: CreateNotificationDto) => Promise<Notification>;
+  updateNotification: (id: string, body: UpdateNotificationDto) => Promise<Notification>;
+  deleteNotification: (id: string) => Promise<void>;
+  sendBulk: (
+    templateId: string,
+    recipientIds: string[],
+    channel: string,
+  ) => Promise<{ successCount: number; failureCount: number; errors: unknown[] }>;
+
+  // Triggers actions
   fetchTriggers: () => Promise<void>;
   toggleTrigger: (id: string) => void;
-
-  fetchLogs: () => Promise<void>;
 }
 
-export const useNotificationsStore = create<NotificationsState>((set) => ({
+export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   templates: [],
+  templatesTotal: 0,
+  templatesPage: 1,
+  templatesLimit: DEFAULT_LIMIT,
+  templatesLoading: false,
+  templatesError: null,
+
+  notifications: [],
+  notificationsTotal: 0,
+  notificationsPage: 1,
+  notificationsLimit: DEFAULT_LIMIT,
+  notificationsLoading: false,
+  notificationsError: null,
+
   triggers: [],
-  logs: [],
-  loading: false,
+  triggersLoading: false,
 
-  fetchTemplates: async () => {
-    set({ loading: true });
-    await new Promise((r) => setTimeout(r, 100));
-    set({ templates: [...seedTemplates], loading: false });
-  },
-  createTemplate: (t) => {
-    const created: NotificationTemplate = { ...t, id: crypto.randomUUID() };
-    seedTemplates.push(created);
-    set((s) => ({ templates: [...s.templates, created] }));
-  },
-  deleteTemplate: (id) => {
-    const idx = seedTemplates.findIndex((t) => t.id === id);
-    if (idx !== -1) seedTemplates.splice(idx, 1);
-    set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }));
+  // ─── Templates ──────────────────────────────────────────
+  fetchTemplates: async (page = 1, limit = DEFAULT_LIMIT) => {
+    const schoolId = resolveSchoolIdOptional();
+    if (!schoolId) {
+      set({ templates: [], templatesTotal: 0, templatesPage: page, templatesLimit: limit, templatesLoading: false });
+      return;
+    }
+    set({ templatesLoading: true, templatesError: null });
+    try {
+      const res = await notificationTemplatesApi.list(schoolId, { page, limit });
+      set({
+        templates: res.data,
+        templatesTotal: res.total,
+        templatesPage: res.page,
+        templatesLimit: res.limit,
+        templatesLoading: false,
+      });
+    } catch (err) {
+      set({ templatesError: (err as Error).message, templatesLoading: false });
+    }
   },
 
+  createTemplate: async (body) => {
+    const schoolId = resolveSchoolId();
+    const created = await notificationTemplatesApi.create(schoolId, body);
+    // Re-fetch the current page so pagination math stays in sync with backend.
+    const { templatesPage, templatesLimit } = get();
+    await get().fetchTemplates(templatesPage, templatesLimit);
+    return created;
+  },
+
+  deleteTemplate: async (id) => {
+    const schoolId = resolveSchoolId();
+    await notificationTemplatesApi.remove(schoolId, id);
+    const { templatesPage, templatesLimit, templatesTotal } = get();
+    // If we just deleted the last row on this page (and we're not on page 1), step back.
+    const remainingOnPage = get().templates.filter((t) => t.id !== id).length;
+    const targetPage = remainingOnPage === 0 && templatesPage > 1 ? templatesPage - 1 : templatesPage;
+    await get().fetchTemplates(targetPage, templatesLimit);
+    // Best-effort: keep totalled count from drifting if backend lags.
+    if (get().templatesTotal === templatesTotal) {
+      set({ templatesTotal: Math.max(0, templatesTotal - 1) });
+    }
+  },
+
+  // ─── Notifications ──────────────────────────────────────
+  fetchNotifications: async (page = 1, limit = DEFAULT_LIMIT) => {
+    const schoolId = resolveSchoolIdOptional();
+    if (!schoolId) {
+      set({ notifications: [], notificationsTotal: 0, notificationsPage: page, notificationsLimit: limit, notificationsLoading: false });
+      return;
+    }
+    set({ notificationsLoading: true, notificationsError: null });
+    try {
+      const res = await notificationsApi.list(schoolId, { page, limit });
+      set({
+        notifications: res.data,
+        notificationsTotal: res.total,
+        notificationsPage: res.page,
+        notificationsLimit: res.limit,
+        notificationsLoading: false,
+      });
+    } catch (err) {
+      set({ notificationsError: (err as Error).message, notificationsLoading: false });
+    }
+  },
+
+  getNotification: async (id) => {
+    const schoolId = resolveSchoolId();
+    return notificationsApi.getById(schoolId, id);
+  },
+
+  createNotification: async (body) => {
+    const schoolId = resolveSchoolId();
+    const created = await notificationsApi.create(schoolId, body);
+    const { notificationsPage, notificationsLimit } = get();
+    await get().fetchNotifications(notificationsPage, notificationsLimit);
+    return created;
+  },
+
+  updateNotification: async (id, body) => {
+    const schoolId = resolveSchoolId();
+    const updated = await notificationsApi.update(schoolId, id, body);
+    set((s) => ({
+      notifications: s.notifications.map((n) => (n.id === id ? updated : n)),
+    }));
+    return updated;
+  },
+
+  deleteNotification: async (id) => {
+    const schoolId = resolveSchoolId();
+    await notificationsApi.remove(schoolId, id);
+    const { notificationsPage, notificationsLimit, notificationsTotal } = get();
+    const remainingOnPage = get().notifications.filter((n) => n.id !== id).length;
+    const targetPage = remainingOnPage === 0 && notificationsPage > 1 ? notificationsPage - 1 : notificationsPage;
+    await get().fetchNotifications(targetPage, notificationsLimit);
+    if (get().notificationsTotal === notificationsTotal) {
+      set({ notificationsTotal: Math.max(0, notificationsTotal - 1) });
+    }
+  },
+
+  sendBulk: async (templateId, recipientIds, channel) => {
+    const schoolId = resolveSchoolId();
+    const sentAt = new Date().toISOString();
+    const results = await Promise.allSettled(
+      recipientIds.map((recipientId) =>
+        notificationsApi.create(schoolId, {
+          templateId,
+          recipientId,
+          channel,
+          status: 'pending',
+          sentAt,
+        }),
+      ),
+    );
+    const successCount = results.filter((r) => r.status === 'fulfilled').length;
+    const failureCount = results.length - successCount;
+    const errors = results
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => r.reason);
+    return { successCount, failureCount, errors };
+  },
+
+  // ─── Triggers (mock) ────────────────────────────────────
   fetchTriggers: async () => {
-    set({ loading: true });
+    set({ triggersLoading: true });
     await new Promise((r) => setTimeout(r, 100));
-    set({ triggers: [...seedTriggers], loading: false });
+    set({ triggers: [...seedTriggers], triggersLoading: false });
   },
   toggleTrigger: (id) => {
     const t = seedTriggers.find((x) => x.id === id);
     if (t) t.enabled = !t.enabled;
-    set((s) => ({ triggers: s.triggers.map((x) => x.id === id ? { ...x, enabled: !x.enabled } : x) }));
-  },
-
-  fetchLogs: async () => {
-    set({ loading: true });
-    await new Promise((r) => setTimeout(r, 100));
-    set({ logs: [...seedLogs], loading: false });
+    set((s) => ({
+      triggers: s.triggers.map((x) => (x.id === id ? { ...x, enabled: !x.enabled } : x)),
+    }));
   },
 }));
+
+// ─── Re-exports for legacy page imports ────────────────────
+export type { NotificationTemplate, Notification } from '@/types/notification.types';

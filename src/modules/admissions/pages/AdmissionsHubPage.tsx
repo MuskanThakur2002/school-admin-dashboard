@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserPlus2, MessageSquare, FileCheck, CheckCircle2, ArrowRight,
@@ -34,29 +34,31 @@ export default function AdmissionsHubPage() {
   const navigate = useNavigate();
   const enquiries = useAdmissionsStore((s) => s.enquiries);
   const applications = useAdmissionsStore((s) => s.applications);
+  const enquiriesTotal = useAdmissionsStore((s) => s.enquiriesTotal);
+  const stats = useAdmissionsStore((s) => s.applicationStats);
   const fetchEnquiries = useAdmissionsStore((s) => s.fetchEnquiries);
   const fetchApplications = useAdmissionsStore((s) => s.fetchApplications);
-
-  const pending = useMemo(
-    () => applications.filter((a) => a.status === 'verified'),
-    [applications],
-  );
+  const fetchApplicationStats = useAdmissionsStore((s) => s.fetchApplicationStats);
 
   useEffect(() => {
     if (enquiries.length === 0) fetchEnquiries();
     if (applications.length === 0) fetchApplications();
-  }, [enquiries.length, applications.length, fetchEnquiries, fetchApplications]);
+    // Fetch per-status totals every mount so the dashboard stays accurate.
+    fetchApplicationStats();
+  }, [enquiries.length, applications.length, fetchEnquiries, fetchApplications, fetchApplicationStats]);
 
-  // Enquiry stats
+  // Enquiry stats — derived from page 1; conversion rate is approximate above 100.
   const newEnquiries = enquiries.filter((e) => e.status === 'new').length;
   const convertedEnquiries = enquiries.filter((e) => e.status === 'converted').length;
   const conversionRate = enquiries.length > 0 ? Math.round((convertedEnquiries / enquiries.length) * 100) : 0;
 
-  // Application stats
-  const submittedApps = applications.filter((a) => a.status === 'submitted').length;
-  const underReviewApps = applications.filter((a) => a.status === 'under_review').length;
-  const approvedApps = applications.filter((a) => a.status === 'approved').length;
-  const rejectedApps = applications.filter((a) => a.status === 'rejected').length;
+  // Application stats — server-side per-status totals, accurate at any scale.
+  const submittedApps = stats.submitted;
+  const underReviewApps = stats.under_review;
+  const approvedApps = stats.approved;
+  const rejectedApps = stats.rejected;
+  const pendingCount = stats.verified;
+  const applicationsTotal = stats.total;
 
   // Recent activity — latest 6 items from both enquiries and applications
   const recentEnquiries = [...enquiries]
@@ -89,7 +91,7 @@ export default function AdmissionsHubPage() {
       {/* Pipeline stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
         {[
-          { label: 'Enquiries', value: enquiries.length, color: 'text-blue-600' },
+          { label: 'Enquiries', value: enquiriesTotal, color: 'text-blue-600' },
           { label: 'New', value: newEnquiries, color: 'text-violet-600' },
           { label: 'Submitted', value: submittedApps, color: 'text-blue-600' },
           { label: 'Reviewing', value: underReviewApps, color: 'text-amber-600' },
@@ -120,7 +122,7 @@ export default function AdmissionsHubPage() {
           <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Capture walk-in and online enquiries. Track follow-ups.</p>
           <div className="flex items-center gap-4 pt-3 border-t border-[var(--border-subtle)]">
             <div>
-              <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{enquiries.length}</p>
+              <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{enquiriesTotal}</p>
               <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Total</p>
             </div>
             <div>
@@ -145,7 +147,7 @@ export default function AdmissionsHubPage() {
           <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">Pipeline view: submitted → verified. Manage documents.</p>
           <div className="flex items-center gap-4 pt-3 border-t border-[var(--border-subtle)]">
             <div>
-              <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{applications.length}</p>
+              <p className="font-display text-[1.25rem] font-extrabold text-[var(--text-primary)] leading-none">{applicationsTotal}</p>
               <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Total</p>
             </div>
             <div>
@@ -160,9 +162,9 @@ export default function AdmissionsHubPage() {
           onClick={() => navigate('/admissions/approvals')}
           className="text-left bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all group relative overflow-hidden"
         >
-          {pending.length > 0 && (
+          {pendingCount > 0 && (
             <div className="absolute top-0 right-0 px-3 py-1 bg-red-500 text-white text-[0.625rem] font-bold rounded-bl-xl">
-              {pending.length} PENDING
+              {pendingCount} PENDING
             </div>
           )}
           <div className="flex items-center justify-between mb-4">
@@ -179,8 +181,8 @@ export default function AdmissionsHubPage() {
               <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Approved</p>
             </div>
             <div>
-              <p className={cn('font-display text-[1.25rem] font-extrabold leading-none', pending.length > 0 ? 'text-red-500' : 'text-[var(--text-muted)]')}>
-                {pending.length}
+              <p className={cn('font-display text-[1.25rem] font-extrabold leading-none', pendingCount > 0 ? 'text-red-500' : 'text-[var(--text-muted)]')}>
+                {pendingCount}
               </p>
               <p className="text-[0.625rem] text-[var(--text-muted)] mt-0.5">Pending</p>
             </div>
@@ -290,7 +292,7 @@ export default function AdmissionsHubPage() {
       </div>
 
       {/* Pending approvals banner (if any) */}
-      {pending.length > 0 && (
+      {pendingCount > 0 && (
         <div
           onClick={() => navigate('/admissions/approvals')}
           className="mt-5 flex items-center gap-4 px-6 py-4 rounded-2xl bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors"
@@ -300,7 +302,7 @@ export default function AdmissionsHubPage() {
           </div>
           <div className="flex-1">
             <p className="text-[0.875rem] font-bold text-amber-900">
-              {pending.length} application{pending.length !== 1 ? 's' : ''} awaiting your approval
+              {pendingCount} application{pendingCount !== 1 ? 's' : ''} awaiting your approval
             </p>
             <p className="text-[0.75rem] text-amber-700 mt-0.5">Click to review and approve verified applications</p>
           </div>

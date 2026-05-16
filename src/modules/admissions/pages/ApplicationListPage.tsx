@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Search, X, Upload, ArrowRight,
   Download, User, Phone, GraduationCap, Calendar, FileText, Mail,
-  AlertTriangle, ChevronRight, ExternalLink,
+  AlertTriangle, ChevronLeft, ChevronRight, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input/Input';
@@ -40,6 +40,9 @@ const filterPills: { value: FilterValue; label: string }[] = [
 
 export default function ApplicationListPage() {
   const applications = useAdmissionsStore((s) => s.applications);
+  const total = useAdmissionsStore((s) => s.applicationsTotal);
+  const page = useAdmissionsStore((s) => s.applicationsPage);
+  const limit = useAdmissionsStore((s) => s.applicationsLimit);
   const loading = useAdmissionsStore((s) => s.applicationsLoading);
   const fetchApplications = useAdmissionsStore((s) => s.fetchApplications);
   const advanceStatus = useAdmissionsStore((s) => s.advanceApplicationStatus);
@@ -82,10 +85,17 @@ export default function ApplicationListPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (applications.length === 0) fetchApplications();
     if (classes.length === 0) fetchClasses();
     if (parents.length === 0) fetchParents(1, 100);
-  }, [applications.length, classes.length, parents.length, fetchApplications, fetchClasses, fetchParents]);
+  }, [classes.length, parents.length, fetchClasses, fetchParents]);
+
+  // Server-side search + initial fetch. Debounced so we don't hammer the API on keystrokes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetchApplications(1, limit, search.trim() || undefined);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, limit, fetchApplications]);
 
   // Load documents whenever a drawer opens.
   useEffect(() => {
@@ -420,8 +430,33 @@ export default function ApplicationListPage() {
           );
         })}
 
-        <div className="px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filtered.length} of {applications.length} applications</p>
+        <div className="flex items-center justify-between px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          <p className="text-[0.75rem] text-[var(--text-muted)]">
+            {filtered.length === applications.length
+              ? `Showing ${applications.length} of ${total} applications`
+              : `${filtered.length} matching · ${applications.length} on this page · ${total} total`}
+          </p>
+          {total > limit && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchApplications(page - 1, limit, search.trim() || undefined)}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-[0.75rem] font-semibold text-[var(--text-tertiary)] px-2">
+                Page {page} of {Math.max(1, Math.ceil(total / limit))}
+              </span>
+              <button
+                onClick={() => fetchApplications(page + 1, limit, search.trim() || undefined)}
+                disabled={page >= Math.ceil(total / limit)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg)] hover:bg-[var(--border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

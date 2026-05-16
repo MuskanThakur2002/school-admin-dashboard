@@ -9,10 +9,8 @@ import type {
   CancelReceiptDto,
   AddSettlementNoteDto,
   UpdateSettlementStatusDto,
-  PaymentMode,
   SettlementNote,
 } from '@/types/receipt.types';
-import { ledgerApi } from './ledger.api';
 import { demoStudentsApi } from './students.api';
 
 const D = 150;
@@ -41,10 +39,6 @@ const nextId = () => `rcp-${++idCounter}`;
 let noteCounter = 3;
 const nextNoteId = () => `sn-${++noteCounter}`;
 
-const modeLabel: Record<PaymentMode, string> = {
-  cash: 'Cash', cheque: 'Cheque', upi: 'UPI', neft: 'NEFT', dd: 'DD', card: 'Card', online: 'Online',
-};
-
 // ═════════════════════════════════════════════════════════════
 // PUBLIC API
 // ═════════════════════════════════════════════════════════════
@@ -61,18 +55,6 @@ export const receiptApi = {
     const today = new Date().toISOString().split('T')[0];
     const receiptNo = nextReceiptNo();
 
-    // Create ledger credit entry
-    const ledgerEntry = await ledgerApi.createEntry({
-      studentId: dto.studentId,
-      description: `Payment received — ${modeLabel[dto.mode]}`,
-      type: 'credit',
-      category: 'payment',
-      amount: dto.amount,
-      mode: dto.mode,
-      reference: dto.reference,
-      remarks: dto.remarks,
-    });
-
     const receipt: Receipt = {
       id: nextId(),
       receiptNo,
@@ -87,7 +69,6 @@ export const receiptApi = {
       reference: dto.reference,
       status: 'confirmed',
       remarks: dto.remarks,
-      ledgerEntryId: ledgerEntry.id,
       settlementStatus: 'unsettled',
       settlementNotes: [],
     };
@@ -105,16 +86,6 @@ export const receiptApi = {
 
     const receipt = receiptsDb[idx];
     const today = new Date().toISOString().split('T')[0];
-
-    // Create reversal debit entry
-    await ledgerApi.createEntry({
-      studentId: receipt.studentId,
-      description: `Bounced cheque reversal — ${receipt.receiptNo}`,
-      type: 'debit',
-      category: 'other',
-      amount: receipt.amount,
-      reference: receipt.reference,
-    });
 
     receiptsDb[idx] = {
       ...receipt,
@@ -135,16 +106,6 @@ export const receiptApi = {
 
     const receipt = receiptsDb[idx];
     const today = new Date().toISOString().split('T')[0];
-
-    // Create reversal debit entry
-    await ledgerApi.createEntry({
-      studentId: receipt.studentId,
-      description: `Cancelled receipt reversal — ${receipt.receiptNo}`,
-      type: 'debit',
-      category: 'other',
-      amount: receipt.amount,
-      reference: receipt.reference,
-    });
 
     receiptsDb[idx] = {
       ...receipt,

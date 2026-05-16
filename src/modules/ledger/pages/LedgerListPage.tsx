@@ -15,12 +15,12 @@ const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
 
 export default function LedgerListPage() {
   const navigate = useNavigate();
-  const { summaries, loading, fetchSummaries } = useLedgerStore();
+  const { summaries, loading, fetchLedgers } = useLedgerStore();
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  useEffect(() => { fetchSummaries(); }, [fetchSummaries]);
+  useEffect(() => { fetchLedgers(); }, [fetchLedgers]);
 
   const classOptions = useMemo(() => {
     const classes = [...new Set(summaries.map((s) => s.class))].sort();
@@ -111,7 +111,7 @@ export default function LedgerListPage() {
         {filtered.map((l, idx) => {
           const st = statusStyle[l.status];
           return (
-            <div key={l.studentId} onClick={() => navigate(`/ledger/${l.studentId}`)}
+            <div key={l.studentEnrollmentId} onClick={() => navigate(`/ledger/${l.studentEnrollmentId}`)}
               className={cn('grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_1.2fr_1fr_1fr] gap-4 items-center px-6 py-4 hover:bg-[var(--card-bg-hover)] cursor-pointer transition-colors',
                 idx < filtered.length - 1 && 'border-b border-[var(--border-subtle)]')}>
               <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide">{l.admissionNo}</span>

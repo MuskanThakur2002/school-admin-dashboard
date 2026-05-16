@@ -4,12 +4,17 @@ import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button/Button';
+import { Pagination } from '@/components/ui/Pagination/Pagination';
 import { useUIStore } from '@/stores/ui.store';
 import { useFeeStore } from '@/stores/fee.store';
+import { FeeEngineNav } from '@/modules/fee-engine/components/FeeEngineNav';
 import type { FeeHead } from '@/types/fee.types';
 
 export default function FeeHeadsPage() {
   const heads = useFeeStore((s) => s.heads);
+  const headsPage = useFeeStore((s) => s.headsPage);
+  const headsLimit = useFeeStore((s) => s.headsLimit);
+  const headsTotal = useFeeStore((s) => s.headsTotal);
   const loading = useFeeStore((s) => s.loading);
   const fetchHeads = useFeeStore((s) => s.fetchHeads);
   const createHead = useFeeStore((s) => s.createHead);
@@ -24,7 +29,7 @@ export default function FeeHeadsPage() {
   const showToast = useUIStore((s) => s.showToast);
 
   useEffect(() => {
-    fetchHeads();
+    fetchHeads(1, 25);
   }, [fetchHeads]);
 
   const filtered = heads.filter(
@@ -77,6 +82,8 @@ export default function FeeHeadsPage() {
 
   return (
     <div className="max-w-[1280px]">
+      <FeeEngineNav description="Fee heads are reusable building blocks — just names like 'Tuition Fee' or 'Library Fee'. They have no price by themselves. You attach them to a Fee Structure with an amount to define what students owe." />
+
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -111,19 +118,26 @@ export default function FeeHeadsPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm mb-6">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search fee heads..."
-          className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
-        />
+      <div className="mb-6">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search fee heads..."
+            className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-tertiary)]">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-tertiary)]">
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <p className="text-[0.6875rem] text-[var(--text-muted)] mt-1.5 pl-1">
+            Searches the current page only ({heads.length} of {headsTotal} loaded)
+          </p>
         )}
       </div>
 
@@ -174,9 +188,14 @@ export default function FeeHeadsPage() {
           </div>
         )}
 
-        <div className="px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{filtered.length} of {heads.length} fee heads</p>
-        </div>
+        <Pagination
+          page={headsPage}
+          limit={headsLimit}
+          total={headsTotal}
+          onPageChange={(p) => fetchHeads(p, headsLimit)}
+          onLimitChange={(l) => fetchHeads(1, l)}
+          label="fee heads"
+        />
       </div>
 
       {/* Modal */}

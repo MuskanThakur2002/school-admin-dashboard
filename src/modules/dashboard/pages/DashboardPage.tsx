@@ -68,7 +68,7 @@ const recentActivity = [
   { id: 1, title: 'Fee reminder sent', desc: 'Class IX — 45 parents notified', time: '10m', ok: true, route: '/notifications/logs' },
   { id: 2, title: 'Admission approved', desc: 'Riya Sharma — Class VII-A', time: '25m', ok: true, route: '/admissions/applications' },
   { id: 3, title: 'SMS delivery failed', desc: '3 messages to parent contacts', time: '1h', ok: false, route: '/notifications/logs' },
-  { id: 4, title: 'Fee payment received', desc: 'Arjun Patel — INR 45,000', time: '2h', ok: true, route: '/ledger/1' },
+  { id: 4, title: 'Fee payment received', desc: 'Arjun Patel — INR 45,000', time: '2h', ok: true, route: '/ledger' },
   { id: 5, title: 'New enquiry captured', desc: 'Walk-in — Class III interest', time: '3h', ok: true, route: '/admissions' },
 ];
 

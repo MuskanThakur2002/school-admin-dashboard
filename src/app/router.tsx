@@ -96,6 +96,9 @@ export const router = createBrowserRouter([
               // Attendance (admin viewer — teachers mark via separate app)
               { path: 'attendance', element: lazyPage(() => import('@/modules/attendance/pages/AttendanceListPage')) },
 
+              // Homework
+              { path: 'homework', element: lazyPage(() => import('@/modules/homework/pages/HomeworkListPage')) },
+
               // Parents
               { path: 'parents', element: lazyPage(() => import('@/modules/parents/pages/ParentListPage')) },
               { path: 'parents/:id', element: lazyPage(() => import('@/modules/parents/pages/ParentProfilePage')) },
@@ -107,6 +110,7 @@ export const router = createBrowserRouter([
                   { index: true, element: lazyPage(() => import('@/modules/fee-engine/pages/FeeStructurePage')) },
                   { path: 'structures', element: lazyPage(() => import('@/modules/fee-engine/pages/FeeStructurePage')) },
                   { path: 'heads', element: lazyPage(() => import('@/modules/fee-engine/pages/FeeHeadsPage')) },
+                  { path: 'assignments', element: lazyPage(() => import('@/modules/fee-engine/pages/AssignmentsPage')) },
                   { path: 'installments', element: lazyPage(() => import('@/modules/fee-engine/pages/InstallmentPlanPage')) },
                   { path: 'concessions', element: lazyPage(() => import('@/modules/fee-engine/pages/ConcessionPage')) },
                   { path: 'late-fee', element: lazyPage(() => import('@/modules/fee-engine/pages/LateFeeConfigPage')) },
@@ -116,7 +120,7 @@ export const router = createBrowserRouter([
 
               // Ledger
               { path: 'ledger', element: lazyPage(() => import('@/modules/ledger/pages/LedgerListPage')) },
-              { path: 'ledger/:studentId', element: lazyPage(() => import('@/modules/ledger/pages/StudentLedgerPage')) },
+              { path: 'ledger/:enrollmentId', element: lazyPage(() => import('@/modules/ledger/pages/StudentLedgerPage')) },
 
               // Expenses
               { path: 'expenses', element: lazyPage(() => import('@/modules/expenses/pages/ExpensePostingPage')) },
