@@ -38,6 +38,7 @@ function deriveStatus(balance: number, lastPaymentDate: string): LedgerStatus {
 function buildSummaries(
   entries: LedgerEntry[],
   enrollmentsById: Map<string, StudentEnrollment>,
+  classNameById: Map<string, string>,
 ): StudentLedgerSummary[] {
   const groups = new Map<string, LedgerEntry[]>();
   for (const e of entries) {
@@ -62,12 +63,13 @@ function buildSummaries(
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const lastPaymentDate = credits[0]?.createdAt.slice(0, 10) ?? '';
 
+    const classMasterId = enrollment?.classSection?.classMasterId;
     summaries.push({
       studentEnrollmentId: enrollmentId,
       studentId: enrollment?.studentId ?? '',
       studentName: enrollment?.student?.name ?? '',
       admissionNo: enrollment?.student?.admissionNumber ?? '',
-      class: '',
+      class: classMasterId ? classNameById.get(classMasterId) ?? '' : '',
       section: enrollment?.classSection?.section ?? '',
       totalDue,
       totalPaid,
@@ -89,7 +91,7 @@ interface LedgerState {
 
   // List ledger entries, defaulting to the active academic year.
   fetchLedgers: (params?: LedgerListParams) => Promise<LedgerEntry[]>;
-  // Alias kept for callers (expense.store, receipt.store, PaymentPostingPage).
+  // Alias kept for callers that need to trigger a refresh after a mutation.
   fetchSummaries: () => Promise<void>;
   // Fetch entries for a single enrollment in the active year (or explicit year).
   fetchEnrollmentLedger: (
@@ -129,7 +131,16 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
       }
       const enrollmentsById = new Map(enrollments.map((e) => [e.id, e]));
 
-      const summaries = buildSummaries(res.data, enrollmentsById);
+      // Classes give us human-readable names (e.g. "VIII") for the list view.
+      const academic = useAcademicStore.getState();
+      if (academic.classes.length === 0) {
+        await academic.fetchClasses();
+      }
+      const classNameById = new Map(
+        useAcademicStore.getState().classes.map((c) => [c.id, c.shortName || c.name]),
+      );
+
+      const summaries = buildSummaries(res.data, enrollmentsById, classNameById);
       set({ entries: res.data, summaries, total: res.total, loading: false });
       return res.data;
     } catch (err) {

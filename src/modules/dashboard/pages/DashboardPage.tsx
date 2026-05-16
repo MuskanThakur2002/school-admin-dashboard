@@ -1,15 +1,15 @@
+import { useEffect, useMemo, useState } from 'react';
 import {
   UserPlus,
   Users,
   Wallet,
   IndianRupee,
-  Bell,
   Clock,
-  CheckCircle2,
   AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from 'lucide-react';
 import {
   BarChart,
@@ -18,59 +18,22 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   AreaChart,
   Area,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { useThemeStore } from '@/stores/theme.store';
-
-// ─── Mock Data ───────────────────────────────────────────────
-
-const collectionData = [
-  { month: 'Jul', amount: 420000 },
-  { month: 'Aug', amount: 580000 },
-  { month: 'Sep', amount: 510000 },
-  { month: 'Oct', amount: 670000 },
-  { month: 'Nov', amount: 490000 },
-  { month: 'Dec', amount: 720000 },
-  { month: 'Jan', amount: 650000 },
-  { month: 'Feb', amount: 810000 },
-  { month: 'Mar', amount: 730000 },
-];
-
-const attendanceData = [
-  { name: 'Present', value: 847, color: '#0d7c66' },
-  { name: 'Absent', value: 53, color: '#dc2626' },
-  { name: 'Late', value: 32, color: '#f59e0b' },
-];
-
-const admissionTrend = [
-  { week: 'W1', enquiries: 12, applications: 8 },
-  { week: 'W2', enquiries: 18, applications: 14 },
-  { week: 'W3', enquiries: 15, applications: 11 },
-  { week: 'W4', enquiries: 22, applications: 17 },
-  { week: 'W5', enquiries: 28, applications: 21 },
-  { week: 'W6', enquiries: 25, applications: 19 },
-];
-
-const pendingActions = [
-  { id: 1, text: '5 applications awaiting verification', priority: 'high' as const, time: '2h ago', route: '/admissions/approvals' },
-  { id: 2, text: '12 bounced cheques need resolution', priority: 'high' as const, time: '4h ago', route: '/receipts/reconciliation' },
-  { id: 3, text: '3 failed SMS deliveries to retry', priority: 'medium' as const, time: '6h ago', route: '/notifications/logs' },
-  { id: 4, text: 'Timetable for Class X-B incomplete', priority: 'low' as const, time: '1d ago', route: '/academic/timetable' },
-];
-
-const recentActivity = [
-  { id: 1, title: 'Fee reminder sent', desc: 'Class IX — 45 parents notified', time: '10m', ok: true, route: '/notifications/logs' },
-  { id: 2, title: 'Admission approved', desc: 'Riya Sharma — Class VII-A', time: '25m', ok: true, route: '/admissions/applications' },
-  { id: 3, title: 'SMS delivery failed', desc: '3 messages to parent contacts', time: '1h', ok: false, route: '/notifications/logs' },
-  { id: 4, title: 'Fee payment received', desc: 'Arjun Patel — INR 45,000', time: '2h', ok: true, route: '/ledger' },
-  { id: 5, title: 'New enquiry captured', desc: 'Walk-in — Class III interest', time: '3h', ok: true, route: '/admissions' },
-];
+import { useAuthStore } from '@/stores/auth.store';
+import { isSuperAdmin } from '@/types/auth.types';
+import { studentsApi } from '@/services/modules/students.api';
+import { paymentApi } from '@/services/modules/payment.api';
+import { ledgerApi } from '@/services/modules/ledger.api';
+import { applicationsApi } from '@/services/modules/applications.api';
+import { enquiriesApi } from '@/services/modules/enquiries.api';
+import type { Payment } from '@/types/payment.types';
+import type { LedgerEntry } from '@/types/ledger.types';
+import type { Application, Enquiry } from '@/types/admissions.types';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -82,6 +45,8 @@ const fmtShort = (v: number) => {
   if (v >= 1000) return `${(v / 1000).toFixed(0)}K`;
   return String(v);
 };
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const getTooltipStyle = (isDark: boolean): React.CSSProperties => ({
   background: isDark ? 'rgba(20, 23, 31, 0.95)' : 'rgba(255,255,255,0.95)',
@@ -96,13 +61,20 @@ const getTooltipStyle = (isDark: boolean): React.CSSProperties => ({
   color: isDark ? '#f1f5f9' : '#0f172a',
 });
 
-// ─── Metric Card (inline, one per card) ─────────────────────
+// Treats a payment as collected unless explicitly failed/cancelled/refunded —
+// matches how ReceiptListPage shows it.
+function isCollected(status: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s !== 'failed' && s !== 'cancelled' && s !== 'refunded';
+}
+
+// ─── Metric Card (inline) ─────────────────────────────────────
 
 interface MetricProps {
   label: string;
   value: string;
-  change: string;
-  trend: 'up' | 'down';
+  change?: string;
+  trend?: 'up' | 'down';
   icon: React.ElementType;
   iconBg: string;
   onClick?: () => void;
@@ -128,13 +100,15 @@ function MetricCard({ label, value, change, trend, icon: Icon, iconBg, onClick, 
         {value}
       </p>
       <div className="flex items-center justify-between">
-        <div className={cn(
-          'inline-flex items-center gap-1 text-[0.75rem] font-semibold',
-          trend === 'up' ? 'text-emerald-600' : 'text-red-500',
-        )}>
-          {trend === 'up' ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-          <span>{change}</span>
-        </div>
+        {change ? (
+          <div className={cn(
+            'inline-flex items-center gap-1 text-[0.75rem] font-semibold',
+            trend === 'up' ? 'text-emerald-600' : 'text-red-500',
+          )}>
+            {trend === 'up' ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+            <span>{change}</span>
+          </div>
+        ) : <span />}
         <ArrowRight className="w-3.5 h-3.5 text-[var(--text-ghost)] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
       </div>
     </div>
@@ -154,6 +128,75 @@ function SectionTitle({ children, action }: { children: React.ReactNode; action?
   );
 }
 
+// ─── Aggregation helpers ────────────────────────────────────
+
+// Build a 9-month bar series ending at the current month.
+function buildCollectionSeries(payments: Payment[]): { month: string; amount: number }[] {
+  const now = new Date();
+  const buckets: { key: string; label: string; amount: number }[] = [];
+  for (let i = 8; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.push({
+      key: `${d.getFullYear()}-${d.getMonth()}`,
+      label: MONTH_LABELS[d.getMonth()],
+      amount: 0,
+    });
+  }
+  const byKey = new Map(buckets.map((b) => [b.key, b]));
+  for (const p of payments) {
+    if (!isCollected(p.status) || !p.paidAt) continue;
+    const d = new Date(p.paidAt);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const b = byKey.get(key);
+    if (b) b.amount += Number(p.amount) || 0;
+  }
+  return buckets.map((b) => ({ month: b.label, amount: b.amount }));
+}
+
+// 6-week pipeline: enquiry + application counts grouped by week start.
+function buildAdmissionPipeline(
+  enquiries: Enquiry[],
+  applications: Application[],
+): { week: string; enquiries: number; applications: number }[] {
+  const now = new Date();
+  // Start of current week (Mon) — anchor to midnight.
+  const anchor = new Date(now);
+  anchor.setHours(0, 0, 0, 0);
+  const day = anchor.getDay();
+  const offsetToMonday = (day + 6) % 7;
+  anchor.setDate(anchor.getDate() - offsetToMonday);
+
+  const buckets: { start: number; end: number; label: string; enquiries: number; applications: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(anchor);
+    start.setDate(start.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    buckets.push({
+      start: start.getTime(),
+      end: end.getTime(),
+      label: `W${6 - i}`,
+      enquiries: 0,
+      applications: 0,
+    });
+  }
+
+  for (const e of enquiries) {
+    const t = new Date(e.date).getTime();
+    if (isNaN(t)) continue;
+    const b = buckets.find((b) => t >= b.start && t < b.end);
+    if (b) b.enquiries++;
+  }
+  for (const a of applications) {
+    const t = new Date(a.appliedDate).getTime();
+    if (isNaN(t)) continue;
+    const b = buckets.find((b) => t >= b.start && t < b.end);
+    if (b) b.applications++;
+  }
+  return buckets.map((b) => ({ week: b.label, enquiries: b.enquiries, applications: b.applications }));
+}
+
 // ─── Dashboard Page ─────────────────────────────────────────
 
 export function DashboardPage() {
@@ -163,8 +206,126 @@ export function DashboardPage() {
   const tooltipStyle = getTooltipStyle(isDark);
   const axisColor = isDark ? '#64748b' : '#94a3b8';
 
-  const attendanceTotal = attendanceData.reduce((s, d) => s + d.value, 0);
-  const presentPct = Math.round((attendanceData[0].value / attendanceTotal) * 100);
+  const user = useAuthStore((s) => s.user);
+  const activeSchoolId = useAuthStore((s) => s.activeSchoolId);
+  const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+
+  const [loading, setLoading] = useState(true);
+  const [studentTotal, setStudentTotal] = useState(0);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [ledgers, setLedgers] = useState<LedgerEntry[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+
+  useEffect(() => {
+    if (!schoolId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      // Fetch in parallel — limit 500 is enough for a dashboard snapshot on
+      // most schools; if a school exceeds this we accept first-page bias and
+      // wait for backend summary endpoints to ship.
+      const [studentsRes, paymentsRes, ledgersRes, applicationsRes, enquiriesRes] = await Promise.all([
+        studentsApi.list(schoolId, { page: 1, limit: 1 }).catch(() => ({ total: 0, data: [], page: 1, limit: 1 })),
+        paymentApi.list(schoolId, { page: 1, limit: 500 }).catch(() => ({ data: [], total: 0, page: 1, limit: 0 })),
+        ledgerApi.list(schoolId, { page: 1, limit: 500 }).catch(() => ({ data: [], total: 0, page: 1, limit: 0 })),
+        applicationsApi.list(schoolId, { page: 1, limit: 500 }).catch(() => ({ data: [], total: 0, page: 1, limit: 0 })),
+        enquiriesApi.list(schoolId, { page: 1, limit: 500 }).catch(() => ({ data: [], total: 0, page: 1, limit: 0 })),
+      ]);
+      if (cancelled) return;
+      setStudentTotal(studentsRes.total);
+      setPayments(paymentsRes.data);
+      setLedgers(ledgersRes.data);
+      setApplications(applicationsRes.data);
+      setEnquiries(enquiriesRes.data);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [schoolId]);
+
+  // ─── Derived metrics ──────────────────────────────────────
+  const { feeCollectionThisMonth, newAdmissionsThisMonth, outstanding } = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    const collected = payments.reduce((sum, p) => {
+      if (!isCollected(p.status) || !p.paidAt) return sum;
+      const d = new Date(p.paidAt);
+      if (d.getFullYear() !== year || d.getMonth() !== month) return sum;
+      return sum + (Number(p.amount) || 0);
+    }, 0);
+
+    const admissions = applications.filter((a) => {
+      if (!a.appliedDate) return false;
+      const d = new Date(a.appliedDate);
+      return d.getFullYear() === year && d.getMonth() === month;
+    }).length;
+
+    let debit = 0;
+    let credit = 0;
+    for (const l of ledgers) {
+      const v = Number(l.amount) || 0;
+      if (l.entryType === 'Debit') debit += v;
+      else credit += v;
+    }
+    return {
+      feeCollectionThisMonth: collected,
+      newAdmissionsThisMonth: admissions,
+      outstanding: Math.max(0, debit - credit),
+    };
+  }, [payments, ledgers, applications]);
+
+  const collectionData = useMemo(() => buildCollectionSeries(payments), [payments]);
+  const admissionTrend = useMemo(() => buildAdmissionPipeline(enquiries, applications), [enquiries, applications]);
+
+  const pendingActions = useMemo(() => {
+    const items: { id: string; text: string; priority: 'high' | 'medium' | 'low'; route: string }[] = [];
+    const submitted = applications.filter((a) => a.status === 'submitted').length;
+    const underReview = applications.filter((a) => a.status === 'under_review').length;
+    const newEnquiries = enquiries.filter((e) => e.status === 'new').length;
+    if (underReview > 0) items.push({
+      id: 'under-review', text: `${underReview} application${underReview === 1 ? '' : 's'} under review`, priority: 'high', route: '/admissions/approvals',
+    });
+    if (submitted > 0) items.push({
+      id: 'submitted', text: `${submitted} application${submitted === 1 ? '' : 's'} awaiting verification`, priority: 'high', route: '/admissions/applications',
+    });
+    if (newEnquiries > 0) items.push({
+      id: 'new-enquiries', text: `${newEnquiries} new enquir${newEnquiries === 1 ? 'y' : 'ies'} to follow up`, priority: 'medium', route: '/admissions',
+    });
+    return items;
+  }, [applications, enquiries]);
+
+  // ─── Render ───────────────────────────────────────────────
+
+  if (!schoolId) {
+    return (
+      <div className="max-w-[1280px]">
+        <div className="mb-8">
+          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Dashboard</h1>
+        </div>
+        <div className="bg-[var(--card-bg)] rounded-2xl p-16 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
+          <p className="text-[0.875rem] text-[var(--text-muted)]">Select a school to view dashboard data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-[1280px]">
+        <div className="mb-8">
+          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Dashboard</h1>
+        </div>
+        <div className="bg-[var(--card-bg)] rounded-2xl p-16 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)] mx-auto" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1280px]">
@@ -182,9 +343,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         <MetricCard
           label="Total Students"
-          value="932"
-          change="+24 this month"
-          trend="up"
+          value={String(studentTotal)}
           icon={Users}
           iconBg="bg-blue-50 text-blue-600"
           onClick={() => navigate('/students')}
@@ -192,8 +351,8 @@ export function DashboardPage() {
         />
         <MetricCard
           label="New Admissions"
-          value="47"
-          change="+12% vs last month"
+          value={String(newAdmissionsThisMonth)}
+          change="this month"
           trend="up"
           icon={UserPlus}
           iconBg="bg-emerald-50 text-emerald-600"
@@ -202,8 +361,8 @@ export function DashboardPage() {
         />
         <MetricCard
           label="Fee Collection"
-          value={fmt(810000)}
-          change="+8.2% vs last month"
+          value={fmt(feeCollectionThisMonth)}
+          change="this month"
           trend="up"
           icon={IndianRupee}
           iconBg="bg-violet-50 text-violet-600"
@@ -212,9 +371,7 @@ export function DashboardPage() {
         />
         <MetricCard
           label="Outstanding"
-          value={fmt(245000)}
-          change="-15% vs last month"
-          trend="down"
+          value={fmt(outstanding)}
           icon={Wallet}
           iconBg="bg-amber-50 text-amber-600"
           onClick={() => navigate('/ledger')}
@@ -222,113 +379,51 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* ── Charts Row ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-8">
-        {/* Fee Collection — Bar Chart */}
-        <div className="xl:col-span-2 bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <SectionTitle
-            action={
-              <select className="text-[0.75rem] text-[var(--text-muted)] bg-transparent outline-none font-medium cursor-pointer">
-                <option>This Year</option>
-                <option>Last Year</option>
-              </select>
-            }
-          >
-            Fee Collection
-          </SectionTitle>
-          <div className="h-[260px] mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={collectionData} barSize={28} barGap={4}>
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: axisColor, fontSize: 11, fontFamily: 'Inter' }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: axisColor, fontSize: 11, fontFamily: 'Inter' }}
-                  tickFormatter={(v: number) => fmtShort(v)}
-                  width={45}
-                />
-                <Tooltip
-                  formatter={(value) => [fmt(Number(value)), 'Collection']}
-                  contentStyle={tooltipStyle}
-                  cursor={{ fill: 'rgba(0,44,152,0.03)' }}
-                />
-                <defs>
-                  <linearGradient id="barFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#002c98" />
-                    <stop offset="100%" stopColor="#3b6cf5" />
-                  </linearGradient>
-                </defs>
-                <Bar
-                  dataKey="amount"
-                  fill="url(#barFill)"
-                  radius={[8, 8, 4, 4]}
-                  animationDuration={800}
-                  animationBegin={200}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Today's Attendance — Donut */}
-        <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <SectionTitle>Attendance</SectionTitle>
-          <div className="flex flex-col items-center">
-            <div className="relative h-[180px] w-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={attendanceData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={85}
-                    paddingAngle={3}
-                    dataKey="value"
-                    strokeWidth={0}
-                    animationDuration={1000}
-                  >
-                    {attendanceData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Center label */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display text-[2rem] font-extrabold text-[var(--text-primary)] leading-none">
-                  {presentPct}%
-                </span>
-                <span className="text-[0.6875rem] text-[var(--text-muted)] mt-0.5">present</span>
-              </div>
-            </div>
-            {/* Legend */}
-            <div className="flex gap-5 mt-4">
-              {attendanceData.map((item) => (
-                <div key={item.name} className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-[0.6875rem] text-[var(--text-tertiary)] font-medium">
-                    {item.name}
-                  </span>
-                  <span className="text-[0.6875rem] text-[var(--text-muted)]">
-                    {item.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* ── Fee Collection Chart (full width) ── */}
+      <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8">
+        <SectionTitle>Fee Collection</SectionTitle>
+        <div className="h-[260px] mt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={collectionData} barSize={28} barGap={4}>
+              <XAxis
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: axisColor, fontSize: 11, fontFamily: 'Inter' }}
+                dy={8}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: axisColor, fontSize: 11, fontFamily: 'Inter' }}
+                tickFormatter={(v: number) => fmtShort(v)}
+                width={45}
+              />
+              <Tooltip
+                formatter={(value) => [fmt(Number(value)), 'Collection']}
+                contentStyle={tooltipStyle}
+                cursor={{ fill: 'rgba(0,44,152,0.03)' }}
+              />
+              <defs>
+                <linearGradient id="barFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#002c98" />
+                  <stop offset="100%" stopColor="#3b6cf5" />
+                </linearGradient>
+              </defs>
+              <Bar
+                dataKey="amount"
+                fill="url(#barFill)"
+                radius={[8, 8, 4, 4]}
+                animationDuration={800}
+                animationBegin={200}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* ── Bottom Row ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Admission Pipeline — Area */}
+      {/* ── Bottom Row: Pipeline + Pending Actions ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <SectionTitle>Admission Pipeline</SectionTitle>
           <div className="flex gap-4 mb-4">
@@ -341,7 +436,7 @@ export function DashboardPage() {
               <span className="text-[0.6875rem] text-[var(--text-tertiary)]">Applications</span>
             </div>
           </div>
-          <div className="h-[180px]">
+          <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={admissionTrend}>
                 <defs>
@@ -364,7 +459,6 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Pending Actions */}
         <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <SectionTitle
             action={
@@ -375,76 +469,44 @@ export function DashboardPage() {
           >
             Pending Actions
           </SectionTitle>
-          <div className="space-y-1">
-            {pendingActions.map((action) => (
-              <div
-                key={action.id}
-                onClick={() => navigate(action.route)}
-                className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-[var(--card-bg-hover)] transition-colors cursor-pointer group"
-              >
-                <div className={cn(
-                  'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-                  action.priority === 'high' ? 'bg-red-50' : 'bg-slate-50',
-                )}>
-                  {action.priority === 'high' ? (
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-500" strokeWidth={2} />
-                  ) : (
-                    <Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
-                  )}
+          {pendingActions.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-[0.8125rem] text-[var(--text-muted)]">All caught up — nothing pending.</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {pendingActions.map((action) => (
+                <div
+                  key={action.id}
+                  onClick={() => navigate(action.route)}
+                  className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-[var(--card-bg-hover)] transition-colors cursor-pointer group"
+                >
+                  <div className={cn(
+                    'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
+                    action.priority === 'high' ? 'bg-red-50' : 'bg-slate-50',
+                  )}>
+                    {action.priority === 'high' ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" strokeWidth={2} />
+                    ) : (
+                      <Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[0.8125rem] text-[var(--text-secondary)] leading-snug">{action.text}</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-[var(--text-ghost)] group-hover:text-[var(--text-tertiary)] transition-colors mt-1 shrink-0" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[0.8125rem] text-[var(--text-secondary)] leading-snug">{action.text}</p>
-                  <p className="text-[0.6875rem] text-[var(--text-muted)] mt-0.5">{action.time}</p>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-[var(--text-ghost)] group-hover:text-[var(--text-tertiary)] transition-colors mt-1 shrink-0" />
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={() => navigate('/admissions/approvals')}
-            className="w-full mt-3 py-2 rounded-xl text-[0.8125rem] font-semibold text-[#002c98] hover:bg-[var(--border-subtle)] transition-colors"
-          >
-            View all actions
-          </button>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <SectionTitle
-            action={
-              <Bell className="w-4 h-4 text-[var(--text-ghost)]" strokeWidth={1.8} />
-            }
-          >
-            Recent Activity
-          </SectionTitle>
-          <div className="space-y-0.5">
-            {recentActivity.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => navigate(item.route)}
-                className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--card-bg-hover)] transition-colors cursor-pointer"
-              >
-                <div className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5',
-                  item.ok ? 'bg-emerald-50' : 'bg-red-50',
-                )}>
-                  <CheckCircle2
-                    className={cn('w-3.5 h-3.5', item.ok ? 'text-emerald-500' : 'text-red-400')}
-                    strokeWidth={2}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[0.8125rem] text-[var(--text-secondary)] font-medium leading-snug truncate">
-                    {item.title}
-                  </p>
-                  <p className="text-[0.6875rem] text-[var(--text-muted)] truncate">{item.desc}</p>
-                </div>
-                <span className="text-[0.625rem] text-[var(--text-ghost)] font-medium whitespace-nowrap mt-0.5">
-                  {item.time}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+          {pendingActions.length > 0 && (
+            <button
+              onClick={() => navigate('/admissions/approvals')}
+              className="w-full mt-3 py-2 rounded-xl text-[0.8125rem] font-semibold text-[#002c98] hover:bg-[var(--border-subtle)] transition-colors"
+            >
+              View all actions
+            </button>
+          )}
         </div>
       </div>
     </div>

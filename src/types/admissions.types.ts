@@ -60,6 +60,8 @@ export interface ApplicantAddress {
 export interface Application {
   id: string;
   enquiryId?: string; // link back to originating enquiry if converted
+  /** Academic year — needed to create ledger entries / payments after approval. */
+  academicYearId?: string;
 
   // Legacy flat fields (still populated for backwards compat / quick display)
   studentName: string;
@@ -87,6 +89,8 @@ export interface Application {
   assignedClass?: string;
   assignedSection?: string;
   createdStudentId?: string;
+  /** Enrollment row created by the approve endpoint — needed for ledger/payment calls. */
+  createdEnrollmentId?: string;
   rejectionReason?: string;
 }
 

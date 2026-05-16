@@ -99,6 +99,15 @@ export const router = createBrowserRouter([
               // Homework
               { path: 'homework', element: lazyPage(() => import('@/modules/homework/pages/HomeworkListPage')) },
 
+              // Assessments & Marks
+              {
+                path: 'assessments',
+                children: [
+                  { index: true, element: lazyPage(() => import('@/modules/assessments/pages/AssessmentListPage')) },
+                  { path: 'marks', element: lazyPage(() => import('@/modules/assessments/pages/MarksEntryPage')) },
+                ],
+              },
+
               // Parents
               { path: 'parents', element: lazyPage(() => import('@/modules/parents/pages/ParentListPage')) },
               { path: 'parents/:id', element: lazyPage(() => import('@/modules/parents/pages/ParentProfilePage')) },
@@ -131,7 +140,6 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, element: lazyPage(() => import('@/modules/receipts/pages/ReceiptListPage')) },
                   { path: 'post', element: lazyPage(() => import('@/modules/receipts/pages/PaymentPostingPage')) },
-                  { path: 'reconciliation', element: lazyPage(() => import('@/modules/receipts/pages/ReconciliationPage')) },
                 ],
               },
 

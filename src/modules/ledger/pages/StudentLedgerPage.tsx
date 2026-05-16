@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Download, ArrowUpRight, ArrowDownRight, Loader2, X, RotateCcw } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useLedgerStore } from '@/stores/ledger.store';
+import { usePaymentStore } from '@/stores/payment.store';
 import { useEnrollmentStore } from '@/stores/enrollment.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -12,7 +13,12 @@ import type { StudentEnrollment } from '@/types/student.types';
 const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
 const paymentModes = ['cash', 'cheque', 'upi', 'neft', 'dd'] as const;
-const paymentCategories = ['payment', 'concession', 'refund'] as const;
+
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function StudentLedgerPage() {
   const { enrollmentId } = useParams<{ enrollmentId: string }>();
@@ -21,6 +27,7 @@ export default function StudentLedgerPage() {
   const loading = useLedgerStore((s) => s.loading);
   const fetchEnrollmentLedger = useLedgerStore((s) => s.fetchEnrollmentLedger);
   const createEntry = useLedgerStore((s) => s.createEntry);
+  const createPayment = usePaymentStore((s) => s.createPayment);
   const getEnrollment = useEnrollmentStore((s) => s.getEnrollment);
   const years = useAcademicStore((s) => s.years);
   const fetchYears = useAcademicStore((s) => s.fetchYears);
@@ -34,11 +41,12 @@ export default function StudentLedgerPage() {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refunding, setRefunding] = useState(false);
 
+  const [selectedDebitId, setSelectedDebitId] = useState('');
   const [payAmount, setPayAmount] = useState('');
   const [payMode, setPayMode] = useState('cash');
-  const [payCategory, setPayCategory] = useState<typeof paymentCategories[number]>('payment');
   const [payRef, setPayRef] = useState('');
-  const [payRemarks, setPayRemarks] = useState('');
+  const [payReceiptNo, setPayReceiptNo] = useState('');
+  const [payPaidAt, setPayPaidAt] = useState(toDatetimeLocal(new Date().toISOString()));
 
   const [refundAmount, setRefundAmount] = useState('');
   const [refundMode, setRefundMode] = useState('neft');
@@ -65,38 +73,42 @@ export default function StudentLedgerPage() {
   const isOverpaid = currentBalance < 0;
   const overpaymentAmount = isOverpaid ? Math.abs(currentBalance) : 0;
 
+  const debitEntries = useMemo(
+    () => entries.filter((e) => e.entryType === 'Debit'),
+    [entries],
+  );
+
   const studentName = enrollment?.student?.name ?? '';
   const initials = studentName
     ? studentName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase()
     : '';
 
   const resetPayForm = () => {
+    setSelectedDebitId('');
     setPayAmount('');
     setPayMode('cash');
-    setPayCategory('payment');
     setPayRef('');
-    setPayRemarks('');
+    setPayReceiptNo('');
+    setPayPaidAt(toDatetimeLocal(new Date().toISOString()));
   };
 
   const handlePostPayment = async () => {
-    if (!enrollmentId || !activeYearId || !userId) {
-      showToast({ type: 'error', title: 'Cannot post', message: 'Missing enrollment, year, or user context' });
+    if (!enrollmentId || !selectedDebitId) {
+      showToast({ type: 'error', title: 'Missing fields', message: 'Pick a charge before posting a payment.' });
       return;
     }
     if (!payAmount || Number(payAmount) <= 0) return;
     setPosting(true);
     try {
-      await createEntry({
+      await createPayment({
         studentEnrollmentId: enrollmentId,
-        academicYearId: activeYearId,
-        entryType: 'Credit',
-        category: payCategory,
+        ledgerEntryId: selectedDebitId,
         amount: Number(payAmount),
-        runningBalance: 0,
-        reference: payRef,
         paymentMode: payMode,
-        remarks: payRemarks,
-        createdById: userId,
+        transactionRef: payRef,
+        status: 'confirmed',
+        receiptNumber: payReceiptNo,
+        paidAt: new Date(payPaidAt).toISOString(),
       });
       await fetchEnrollmentLedger(enrollmentId);
       showToast({ type: 'success', title: 'Payment posted', message: `${fmt(Number(payAmount))} recorded successfully` });
@@ -264,13 +276,40 @@ export default function StudentLedgerPage() {
       {/* Post Payment Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-[var(--card-bg)] rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
+          <div className="bg-[var(--card-bg)] rounded-2xl shadow-xl w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-display text-[1.125rem] font-bold text-[var(--text-primary)]">Post Payment</h2>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowModal(false); resetPayForm(); }} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Pick a Charge</label>
+                {debitEntries.length === 0 ? (
+                  <p className="text-[0.75rem] text-[var(--text-muted)] py-3">No debit entries on this enrollment yet.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                    {debitEntries.map((d) => {
+                      const isSelected = selectedDebitId === d.id;
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => { setSelectedDebitId(d.id); if (!payAmount) setPayAmount(d.amount); }}
+                          className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all',
+                            isSelected ? 'bg-[#f0f4ff] shadow-[0_0_0_2px_rgba(0,44,152,0.15)]' : 'bg-[var(--card-bg-hover)] hover:bg-[var(--border-subtle)]')}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[0.75rem] font-semibold text-[var(--text-primary)] truncate">{d.remarks || d.category}</p>
+                            <p className="text-[0.625rem] text-[var(--text-muted)]">{d.createdAt.slice(0, 10)}</p>
+                          </div>
+                          <span className="font-display text-[0.75rem] font-bold text-red-500">{fmt(Number(d.amount))}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Amount</label>
                 <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0"
@@ -286,32 +325,31 @@ export default function StudentLedgerPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Category</label>
-                  <select value={payCategory} onChange={(e) => setPayCategory(e.target.value as typeof paymentCategories[number])}
-                    className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow">
-                    {paymentCategories.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-                  </select>
+                  <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Receipt No.</label>
+                  <input type="text" value={payReceiptNo} onChange={(e) => setPayReceiptNo(e.target.value)} placeholder="e.g. RCP-2026-0451"
+                    className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Reference (optional)</label>
-                <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="e.g. CHQ-123456"
-                  className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
-              </div>
-
-              <div>
-                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Remarks (optional)</label>
-                <input type="text" value={payRemarks} onChange={(e) => setPayRemarks(e.target.value)} placeholder="Any notes..."
-                  className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Transaction Ref</label>
+                  <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="e.g. UPI-TXN-78234"
+                    className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+                </div>
+                <div>
+                  <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Paid At</label>
+                  <input type="datetime-local" value={payPaidAt} onChange={(e) => setPayPaidAt(e.target.value)}
+                    className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+                </div>
               </div>
             </div>
 
             <div className="flex justify-end gap-2.5 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 rounded-[10px] text-[0.8125rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
+              <button onClick={() => { setShowModal(false); resetPayForm(); }} className="px-4 py-2.5 rounded-[10px] text-[0.8125rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
                 Cancel
               </button>
-              <button onClick={handlePostPayment} disabled={posting || !payAmount || Number(payAmount) <= 0}
+              <button onClick={handlePostPayment} disabled={posting || !selectedDebitId || !payAmount || Number(payAmount) <= 0}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {posting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {posting ? 'Posting...' : 'Post Payment'}

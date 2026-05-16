@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, HeartHandshake, Wallet, BookOpen,
   Receipt, CreditCard, Bell, BarChart3, Building2, Settings, ClipboardCheck, ClipboardList,
-  NotebookPen, ChevronLeft, ChevronRight, Sparkles,
+  NotebookPen, ChevronLeft, ChevronRight, Sparkles, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
@@ -30,14 +30,17 @@ const navItems: NavItem[] = [
   { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
   { label: 'Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
   { label: 'Homework', path: '/homework', icon: NotebookPen, permission: 'homework.read' },
+  { label: 'Assessments', path: '/assessments', icon: ListChecks, permission: 'assessments.read' },
   { label: 'Parents', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
   { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read', end: true },
   { label: 'Fee Assignments', path: '/fees/assignments', icon: ClipboardList, permission: 'fees.read' },
   { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },
-  { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: 'expenses.read' },
+  // TODO: re-enable when Expenses API is ready
+  // { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: 'expenses.read' },
   { label: 'Receipts', path: '/receipts', icon: Receipt, permission: 'receipts.read' },
   { label: 'Notifications', path: '/notifications', icon: Bell, permission: 'notifications.read' },
-  { label: 'Reports', path: '/reports', icon: BarChart3, permission: 'reports.read' },
+  // TODO: re-enable when Reports API is ready
+  // { label: 'Reports', path: '/reports', icon: BarChart3, permission: 'reports.read' },
   { label: 'Tenants', path: '/tenants', icon: Building2, superAdminOnly: true },
   { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' },
 ];

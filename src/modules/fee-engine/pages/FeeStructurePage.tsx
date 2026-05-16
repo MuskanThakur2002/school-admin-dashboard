@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { Pagination } from '@/components/ui/Pagination/Pagination';
 import { FeeEngineNav } from '@/modules/fee-engine/components/FeeEngineNav';
-import type { FeeStructure } from '@/types/fee.types';
+import type { FeeStructure, FeeHead } from '@/types/fee.types';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -34,6 +34,7 @@ export default function FeeStructurePage() {
   const deleteStructure = useFeeStore((s) => s.deleteStructure);
   const createItem = useFeeStore((s) => s.createItem);
   const deleteItem = useFeeStore((s) => s.deleteItem);
+  const createHead = useFeeStore((s) => s.createHead);
   const createInstallment = useFeeStore((s) => s.createInstallment);
   const deleteInstallment = useFeeStore((s) => s.deleteInstallment);
 
@@ -232,6 +233,11 @@ export default function FeeStructurePage() {
               throw err;
             }
           }}
+          onCreateHead={async (name) => {
+            const created = await createHead({ name });
+            showToast({ type: 'success', title: 'Fee head created', message: name });
+            return created;
+          }}
           onDeleteItem={async (itemId) => {
             try {
               await deleteItem(selected.id, itemId);
@@ -304,7 +310,10 @@ interface StructureDetailProps {
   onDeleteItem: (itemId: string) => Promise<void>;
   onAddInstallment: (dueDate: string, amount: number) => Promise<void>;
   onDeleteInstallment: (installmentId: string) => Promise<void>;
+  onCreateHead: (name: string) => Promise<FeeHead>;
 }
+
+const CREATE_HEAD_SENTINEL = '__create__';
 
 function StructureDetail({
   structure,
@@ -316,10 +325,12 @@ function StructureDetail({
   onDeleteItem,
   onAddInstallment,
   onDeleteInstallment,
+  onCreateHead,
 }: StructureDetailProps) {
   const [headId, setHeadId] = useState('');
   const [amount, setAmount] = useState('');
   const [adding, setAdding] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const items = structure.feeStructureItems;
   const total = items.reduce((s, it) => s + Number(it.amount || 0), 0);
@@ -328,6 +339,7 @@ function StructureDetail({
   const availableHeads = heads.filter((h) => !items.some((it) => it.feeHeadId === h.id));
   const headOptions = [
     { label: 'Select fee head...', value: '' },
+    { label: '+ Create new fee head…', value: CREATE_HEAD_SENTINEL },
     ...availableHeads.map((h) => ({ label: h.name, value: h.id })),
   ];
 
@@ -428,7 +440,13 @@ function StructureDetail({
             label="Fee head"
             options={headOptions}
             value={headId}
-            onChange={(e) => setHeadId(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === CREATE_HEAD_SENTINEL) {
+                setCreateOpen(true);
+              } else {
+                setHeadId(e.target.value);
+              }
+            }}
           />
           <Input
             label="Amount (INR)"
@@ -442,10 +460,14 @@ function StructureDetail({
           </Button>
         </div>
         {availableHeads.length === 0 && heads.length > 0 && (
-          <p className="text-[0.6875rem] text-[var(--text-ghost)] mt-2">All fee heads have been attached to this structure.</p>
+          <p className="text-[0.6875rem] text-[var(--text-ghost)] mt-2">
+            All existing fee heads are attached. Use <span className="font-semibold">+ Create new fee head…</span> above to add another.
+          </p>
         )}
         {heads.length === 0 && (
-          <p className="text-[0.6875rem] text-[var(--text-ghost)] mt-2">No fee heads exist yet — create some in the Fee Heads page first.</p>
+          <p className="text-[0.6875rem] text-[var(--text-ghost)] mt-2">
+            No fee heads yet — use <span className="font-semibold">+ Create new fee head…</span> above to create your first one.
+          </p>
         )}
       </div>
 
@@ -455,7 +477,72 @@ function StructureDetail({
         onAdd={onAddInstallment}
         onDelete={onDeleteInstallment}
       />
+
+      {/* Inline create-fee-head modal */}
+      <CreateFeeHeadModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreate={async (name) => {
+          const created = await onCreateHead(name);
+          setHeadId(created.id);
+        }}
+      />
     </div>
+  );
+}
+
+// ─── Inline create-fee-head modal ─────────────────────────────
+
+interface CreateFeeHeadModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (name: string) => Promise<void>;
+}
+
+function CreateFeeHeadModal({ open, onOpenChange, onCreate }: CreateFeeHeadModalProps) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const showToast = useUIStore((s) => s.showToast);
+
+  useEffect(() => {
+    if (open) setName('');
+  }, [open]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || saving) return;
+    setSaving(true);
+    try {
+      await onCreate(trimmed);
+      onOpenChange(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not create fee head.';
+      showToast({ type: 'error', title: 'Create failed', message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add Fee Head"
+      description="Defines a reusable fee component (e.g. Tuition Fee, Library Fee)"
+      footer={
+        <>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} loading={saving} disabled={!name.trim()}>Add Fee Head</Button>
+        </>
+      }
+    >
+      <Input
+        label="Fee Head Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="e.g. Tuition Fee"
+      />
+    </Modal>
   );
 }
 

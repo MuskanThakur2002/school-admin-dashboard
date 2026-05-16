@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Search, X, Upload, ArrowRight,
   Download, User, Phone, GraduationCap, Calendar, FileText, Mail,
-  AlertTriangle, ChevronLeft, ChevronRight, ExternalLink,
+  AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, Wallet,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input/Input';
@@ -12,8 +12,13 @@ import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useParentStore } from '@/stores/parent.store';
+import { useFeeStore } from '@/stores/fee.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { feeApi } from '@/services/modules/fee.api';
+import { isSuperAdmin } from '@/types/auth.types';
 import { documentTypeOptions, formatDocumentTypeLabel } from '@/utils/constants';
 import type { Application, ApplicationStatus } from '@/types/admissions.types';
+import type { FeeStructure } from '@/types/fee.types';
 
 // ─── Status config ──────────────────────────────────────────
 
@@ -59,6 +64,10 @@ export default function ApplicationListPage() {
   // Parent picker source for the approve modal.
   const parents = useParentStore((s) => s.parents);
   const fetchParents = useParentStore((s) => s.fetchParents);
+  // Fee plan source for the post-approve payment step.
+  const feeStructures = useFeeStore((s) => s.structures);
+  const fetchFeeStructures = useFeeStore((s) => s.fetchStructures);
+  const createFeeAssignment = useFeeStore((s) => s.createAssignment);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('all');
@@ -75,6 +84,27 @@ export default function ApplicationListPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Post-approve payment step state. When set, the approve form is replaced by
+  // a "Collect initial payment" form. `null` = approve not yet done.
+  const [paymentContext, setPaymentContext] = useState<null | {
+    enrollmentId: string;
+    academicYearId: string;
+    admissionNumber: string;
+    studentName: string;
+  }>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payCategory, setPayCategory] = useState('Admission Fee');
+  const [payMode, setPayMode] = useState<'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online'>('cash');
+  const [payTxnRef, setPayTxnRef] = useState('');
+  const [payRemarks, setPayRemarks] = useState('');
+  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string; amount: number } | null>(null);
+  const collectInitialPayment = useAdmissionsStore((s) => s.collectInitialPayment);
+
+  // Fee plan selection (lazy-fetches structure detail to auto-fill admission-fee amount).
+  const [selectedStructureId, setSelectedStructureId] = useState('');
+  const [structureDetail, setStructureDetail] = useState<FeeStructure | null>(null);
+  const [structureLoading, setStructureLoading] = useState(false);
+
   // Upload form state
   const [uploadFormOpen, setUploadFormOpen] = useState(false);
   const [uploadType, setUploadType] = useState('');
@@ -88,6 +118,53 @@ export default function ApplicationListPage() {
     if (classes.length === 0) fetchClasses();
     if (parents.length === 0) fetchParents(1, 100);
   }, [classes.length, parents.length, fetchClasses, fetchParents]);
+
+  // Lazy-load fee structures when the payment step opens.
+  useEffect(() => {
+    if (paymentContext && feeStructures.length === 0) {
+      fetchFeeStructures(1, 100);
+    }
+  }, [paymentContext, feeStructures.length, fetchFeeStructures]);
+
+  // Structures that belong to the new student's academic year.
+  const eligibleStructures = useMemo(
+    () => feeStructures.filter((s) => !paymentContext || s.academicYearId === paymentContext.academicYearId),
+    [feeStructures, paymentContext],
+  );
+
+  // On structure pick: fetch its items and auto-fill amount/category from the
+  // FeeHead whose name contains "admission". Admin can still override both.
+  useEffect(() => {
+    if (!selectedStructureId || !paymentContext) {
+      setStructureDetail(null);
+      return;
+    }
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) return;
+    let cancelled = false;
+    setStructureLoading(true);
+    feeApi.getStructure(schoolId, selectedStructureId)
+      .then((detail) => {
+        if (cancelled) return;
+        setStructureDetail(detail);
+        const admissionItem = detail.feeStructureItems.find(
+          (it) => /admission/i.test(it.feeHead?.name ?? ''),
+        );
+        if (admissionItem) {
+          setPayAmount(String(Number(admissionItem.amount) || ''));
+          setPayCategory(admissionItem.feeHead?.name ?? 'Admission Fee');
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        showToast({ type: 'error', title: 'Could not load fee plan', message: (err as Error).message });
+      })
+      .finally(() => {
+        if (!cancelled) setStructureLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedStructureId, paymentContext, showToast]);
 
   // Server-side search + initial fetch. Debounced so we don't hammer the API on keystrokes.
   useEffect(() => {
@@ -123,6 +200,15 @@ export default function ApplicationListPage() {
     setUploadType('');
     setUploadCustomType('');
     setUploadFile(null);
+    setPaymentContext(null);
+    setPayAmount('');
+    setPayCategory('Admission Fee');
+    setPayMode('cash');
+    setPayTxnRef('');
+    setPayRemarks('');
+    setPayReceipt(null);
+    setSelectedStructureId('');
+    setStructureDetail(null);
   };
 
   // Filtering
@@ -258,13 +344,97 @@ export default function ApplicationListPage() {
         title: 'Application approved',
         message: `${updated.admissionNo} — ${updated.studentName} → ${className}${sectionName ? ` · ${sectionName}` : ''}`,
       });
-      setShowApproveForm(false);
+      // Transition the form into the post-approve payment step (or skip if we
+      // can't construct one — should never happen given backend always returns
+      // these, but bail safely).
+      if (updated.createdEnrollmentId && updated.academicYearId) {
+        setPaymentContext({
+          enrollmentId: updated.createdEnrollmentId,
+          academicYearId: updated.academicYearId,
+          admissionNumber: updated.admissionNo ?? '',
+          studentName: updated.studentName,
+        });
+        setShowApproveForm(false);
+      } else {
+        setShowApproveForm(false);
+      }
     } catch (err) {
       showToast({ type: 'error', title: 'Approval failed', message: (err as Error).message });
     } finally {
       setSubmitting(false);
     }
   };
+
+  const resetPaymentForm = () => {
+    setPaymentContext(null);
+    setPayAmount('');
+    setPayCategory('Admission Fee');
+    setPayMode('cash');
+    setPayTxnRef('');
+    setPayRemarks('');
+    setPayReceipt(null);
+    setSelectedStructureId('');
+    setStructureDetail(null);
+  };
+
+  const handleCollectPayment = async () => {
+    if (!paymentContext) return;
+    if (!selectedStructureId) {
+      showToast({ type: 'error', title: 'Pick a fee plan', message: 'Choose a fee structure to link this student to.' });
+      return;
+    }
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast({ type: 'error', title: 'Invalid amount', message: 'Enter a positive amount.' });
+      return;
+    }
+    if (!payCategory.trim()) {
+      showToast({ type: 'error', title: 'Category required', message: 'Pick a fee category.' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // 1. Link the new enrollment to the chosen fee structure so future
+      //    installments/fees are owed against it.
+      await createFeeAssignment({
+        studentEnrollmentId: paymentContext.enrollmentId,
+        feeStructureId: selectedStructureId,
+        concessionPercent: 0,
+        scholarshipAmount: 0,
+      });
+
+      // 2. Post the initial admission payment (Debit + Payment).
+      const res = await collectInitialPayment({
+        studentEnrollmentId: paymentContext.enrollmentId,
+        academicYearId: paymentContext.academicYearId,
+        amount,
+        category: payCategory.trim(),
+        paymentMode: payMode,
+        transactionRef: payTxnRef.trim() || undefined,
+        remarks: payRemarks.trim() || undefined,
+      });
+      setPayReceipt(res);
+      showToast({
+        type: 'success',
+        title: 'Payment collected',
+        message: res.receiptNumber ? `Receipt: ${res.receiptNumber}` : 'Receipt issued.',
+      });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Payment failed', message: (err as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const paymentModeOptions = [
+    { label: 'Cash', value: 'cash' },
+    { label: 'UPI', value: 'upi' },
+    { label: 'Card', value: 'card' },
+    { label: 'Cheque', value: 'cheque' },
+    { label: 'NEFT', value: 'neft' },
+    { label: 'DD', value: 'dd' },
+    { label: 'Online', value: 'online' },
+  ];
 
   const handleReject = async () => {
     if (!selectedApp || !rejectionReason.trim()) {
@@ -699,6 +869,94 @@ export default function ApplicationListPage() {
                       <p className="text-[0.8125rem] font-bold text-emerald-900">Class {selectedApp.assignedClass}-{selectedApp.assignedSection}</p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Post-approve: collect initial payment */}
+              {paymentContext && (
+                <div className="rounded-xl bg-[var(--card-bg)] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                  <p className="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.06em] mb-3">
+                    {payReceipt ? 'Payment collected' : 'Collect initial payment'}
+                  </p>
+
+                  {payReceipt ? (
+                    <div className="space-y-3">
+                      <div className="rounded-lg bg-emerald-50 p-4">
+                        <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Receipt</p>
+                        <p className="text-[0.875rem] font-bold text-emerald-900">{payReceipt.receiptNumber || '—'}</p>
+                        <p className="text-[0.6875rem] text-emerald-700 mt-1">
+                          ₹{payReceipt.amount.toLocaleString('en-IN')} collected for {paymentContext.studentName}.
+                        </p>
+                      </div>
+                      <Button onClick={resetPaymentForm} className="w-full">Done</Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Select
+                        label="Fee Plan *"
+                        options={[
+                          { label: eligibleStructures.length ? 'Select fee plan...' : 'No fee plans for this year', value: '' },
+                          ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
+                        ]}
+                        value={selectedStructureId}
+                        onChange={(e) => setSelectedStructureId(e.target.value)}
+                        disabled={eligibleStructures.length === 0}
+                      />
+                      {selectedStructureId && structureLoading && (
+                        <p className="text-[0.6875rem] text-[var(--text-muted)]">Loading plan details...</p>
+                      )}
+                      {selectedStructureId && !structureLoading && structureDetail && !structureDetail.feeStructureItems.some((it) => /admission/i.test(it.feeHead?.name ?? '')) && (
+                        <div className="rounded-lg bg-amber-50 p-3">
+                          <p className="text-[0.6875rem] text-amber-800 leading-relaxed">
+                            This plan has no "Admission Fee" head — enter the amount manually.
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label="Amount (₹) *"
+                          type="number"
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          placeholder="e.g. 5000"
+                        />
+                        <Input
+                          label="Category *"
+                          value={payCategory}
+                          onChange={(e) => setPayCategory(e.target.value)}
+                          placeholder="Admission Fee"
+                        />
+                      </div>
+                      <Select
+                        label="Payment mode *"
+                        options={paymentModeOptions}
+                        value={payMode}
+                        onChange={(e) => setPayMode(e.target.value as typeof payMode)}
+                      />
+                      {payMode !== 'cash' && (
+                        <Input
+                          label="Transaction reference"
+                          value={payTxnRef}
+                          onChange={(e) => setPayTxnRef(e.target.value)}
+                          placeholder="UPI ID / cheque no / etc."
+                        />
+                      )}
+                      <Input
+                        label="Remarks"
+                        value={payRemarks}
+                        onChange={(e) => setPayRemarks(e.target.value)}
+                        placeholder="Optional notes"
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <Button variant="tertiary" onClick={resetPaymentForm} disabled={submitting}>
+                          Skip
+                        </Button>
+                        <Button onClick={handleCollectPayment} loading={submitting} className="flex-1">
+                          <Wallet className="w-4 h-4" /> Collect & Issue Receipt
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

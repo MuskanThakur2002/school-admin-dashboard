@@ -114,6 +114,7 @@ function toApplication(dto: ApplicationDto): Application {
   return {
     id: dto.id,
     enquiryId: dto.enquiryId ?? undefined,
+    academicYearId: dto.academicYearId,
     studentName: dto.studentName,
     parentName: dto.parentName,
     parentPhone: dto.phoneNumber,
@@ -333,6 +334,7 @@ export const applicationsApi = {
     app.assignedClass = body.assignedClass;
     app.assignedSection = body.assignedSection;
     app.createdStudentId = res.data.student.id;
+    app.createdEnrollmentId = res.data.enrollment.id;
     return app;
   },
 

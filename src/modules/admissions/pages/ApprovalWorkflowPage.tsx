@@ -11,7 +11,12 @@ import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useParentStore } from '@/stores/parent.store';
+import { useFeeStore } from '@/stores/fee.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { feeApi } from '@/services/modules/fee.api';
+import { isSuperAdmin } from '@/types/auth.types';
 import type { Application } from '@/types/admissions.types';
+import type { FeeStructure } from '@/types/fee.types';
 
 export default function ApprovalWorkflowPage() {
   // Verified applications come from a dedicated server-side filtered fetch so the
@@ -48,11 +53,86 @@ export default function ApprovalWorkflowPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Post-approve payment step state. When set, the approve modal pivots to a
+  // "Collect initial payment" form. `null` = approve not yet done.
+  const [paymentContext, setPaymentContext] = useState<null | {
+    enrollmentId: string;
+    academicYearId: string;
+    admissionNumber: string;
+    studentName: string;
+  }>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payCategory, setPayCategory] = useState('Admission Fee');
+  const [payMode, setPayMode] = useState<'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online'>('cash');
+  const [payTxnRef, setPayTxnRef] = useState('');
+  const [payRemarks, setPayRemarks] = useState('');
+  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string; amount: number } | null>(null);
+  const collectInitialPayment = useAdmissionsStore((s) => s.collectInitialPayment);
+
+  // Fee plan picker — required so the new enrollment gets linked to a fee structure
+  // for ongoing fees, and so the modal can auto-fill the admission-fee amount.
+  const feeStructures = useFeeStore((s) => s.structures);
+  const fetchFeeStructures = useFeeStore((s) => s.fetchStructures);
+  const createFeeAssignment = useFeeStore((s) => s.createAssignment);
+  const [selectedStructureId, setSelectedStructureId] = useState('');
+  const [structureDetail, setStructureDetail] = useState<FeeStructure | null>(null);
+  const [structureLoading, setStructureLoading] = useState(false);
+
   useEffect(() => {
     fetchPendingApprovals(1, 100);
     if (classes.length === 0) fetchClasses();
     if (parents.length === 0) fetchParents(1, 100);
   }, [fetchPendingApprovals, fetchClasses, fetchParents, classes.length, parents.length]);
+
+  // When we enter the payment step, make sure fee structures are loaded so the
+  // dropdown isn't empty. Only fires when paymentContext flips from null → set.
+  useEffect(() => {
+    if (paymentContext && feeStructures.length === 0) {
+      fetchFeeStructures(1, 100);
+    }
+  }, [paymentContext, feeStructures.length, fetchFeeStructures]);
+
+  // Structures filtered to the new student's academic year. The list endpoint
+  // doesn't return nested items, so we lazy-load the picked structure's detail
+  // separately to scan for the admission-fee head.
+  const eligibleStructures = useMemo(
+    () => feeStructures.filter((s) => !paymentContext || s.academicYearId === paymentContext.academicYearId),
+    [feeStructures, paymentContext],
+  );
+
+  // On structure pick: fetch its items and auto-fill amount/category from the
+  // FeeHead whose name contains "admission". Admin can still override both.
+  useEffect(() => {
+    if (!selectedStructureId || !paymentContext) {
+      setStructureDetail(null);
+      return;
+    }
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) return;
+    let cancelled = false;
+    setStructureLoading(true);
+    feeApi.getStructure(schoolId, selectedStructureId)
+      .then((detail) => {
+        if (cancelled) return;
+        setStructureDetail(detail);
+        const admissionItem = detail.feeStructureItems.find(
+          (it) => /admission/i.test(it.feeHead?.name ?? ''),
+        );
+        if (admissionItem) {
+          setPayAmount(String(Number(admissionItem.amount) || ''));
+          setPayCategory(admissionItem.feeHead?.name ?? 'Admission Fee');
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        showToast({ type: 'error', title: 'Could not load fee plan', message: (err as Error).message });
+      })
+      .finally(() => {
+        if (!cancelled) setStructureLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedStructureId, paymentContext, showToast]);
 
   const selectedClass = useMemo(
     () => classes.find((c) => c.id === assignedClassId) || null,
@@ -124,14 +204,98 @@ export default function ApprovalWorkflowPage() {
         title: 'Application approved',
         message: `${updated.admissionNo} created — ${updated.studentName} → ${className}${sectionName ? ` · ${sectionName}` : ''}`,
       });
-      setApproveModalOpen(false);
-      setSelectedAppId(null);
+      // Pivot the open modal into the payment step instead of closing it.
+      if (updated.createdEnrollmentId && updated.academicYearId) {
+        setPaymentContext({
+          enrollmentId: updated.createdEnrollmentId,
+          academicYearId: updated.academicYearId,
+          admissionNumber: updated.admissionNo ?? '',
+          studentName: updated.studentName,
+        });
+      } else {
+        setApproveModalOpen(false);
+        setSelectedAppId(null);
+      }
     } catch (err) {
       showToast({ type: 'error', title: 'Approval failed', message: (err as Error).message });
     } finally {
       setSubmitting(false);
     }
   };
+
+  const closeApproveModal = () => {
+    setApproveModalOpen(false);
+    setSelectedAppId(null);
+    setPaymentContext(null);
+    setPayAmount('');
+    setPayCategory('Admission Fee');
+    setPayMode('cash');
+    setPayTxnRef('');
+    setPayRemarks('');
+    setPayReceipt(null);
+    setSelectedStructureId('');
+    setStructureDetail(null);
+  };
+
+  const handleCollectPayment = async () => {
+    if (!paymentContext) return;
+    if (!selectedStructureId) {
+      showToast({ type: 'error', title: 'Pick a fee plan', message: 'Choose a fee structure to link this student to.' });
+      return;
+    }
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast({ type: 'error', title: 'Invalid amount', message: 'Enter a positive amount.' });
+      return;
+    }
+    if (!payCategory.trim()) {
+      showToast({ type: 'error', title: 'Category required', message: 'Pick a fee category.' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // 1. Link the new enrollment to the chosen fee structure so future
+      //    installments/fees are owed against it. Concession and scholarship
+      //    default to 0 — admin can adjust later from /fees/assignments.
+      await createFeeAssignment({
+        studentEnrollmentId: paymentContext.enrollmentId,
+        feeStructureId: selectedStructureId,
+        concessionPercent: 0,
+        scholarshipAmount: 0,
+      });
+
+      // 2. Post the initial admission payment (Debit + Payment).
+      const res = await collectInitialPayment({
+        studentEnrollmentId: paymentContext.enrollmentId,
+        academicYearId: paymentContext.academicYearId,
+        amount,
+        category: payCategory.trim(),
+        paymentMode: payMode,
+        transactionRef: payTxnRef.trim() || undefined,
+        remarks: payRemarks.trim() || undefined,
+      });
+      setPayReceipt(res);
+      showToast({
+        type: 'success',
+        title: 'Payment collected',
+        message: res.receiptNumber ? `Receipt: ${res.receiptNumber}` : 'Receipt issued.',
+      });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Payment failed', message: (err as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const paymentModeOptions = [
+    { label: 'Cash', value: 'cash' },
+    { label: 'UPI', value: 'upi' },
+    { label: 'Card', value: 'card' },
+    { label: 'Cheque', value: 'cheque' },
+    { label: 'NEFT', value: 'neft' },
+    { label: 'DD', value: 'dd' },
+    { label: 'Online', value: 'online' },
+  ];
 
   const handleReject = async () => {
     if (!selectedApp || !rejectionReason.trim()) {
@@ -289,23 +453,124 @@ export default function ApprovalWorkflowPage() {
         </div>
       )}
 
-      {/* Approve Modal */}
+      {/* Approve Modal — pivots to Payment step once approve succeeds. */}
       {selectedApp && (
         <Modal
           open={approveModalOpen}
-          onOpenChange={setApproveModalOpen}
-          title={`Approve: ${selectedApp.studentName}`}
-          description="Assign class and section to generate the admission number"
+          onOpenChange={(open) => { if (!open) closeApproveModal(); else setApproveModalOpen(true); }}
+          title={
+            paymentContext
+              ? payReceipt
+                ? `Receipt: ${payReceipt.receiptNumber || '—'}`
+                : `Collect initial payment: ${paymentContext.studentName}`
+              : `Approve: ${selectedApp.studentName}`
+          }
+          description={
+            paymentContext
+              ? payReceipt
+                ? 'Payment recorded successfully.'
+                : `Admission ${paymentContext.admissionNumber} created. Collect the joining payment or skip.`
+              : 'Assign class and section to generate the admission number'
+          }
           size="md"
           footer={
-            <>
-              <Button variant="tertiary" onClick={() => setApproveModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleApprove} loading={submitting}>
-                <CheckCircle2 className="w-4 h-4" /> Confirm Approval
-              </Button>
-            </>
+            paymentContext ? (
+              payReceipt ? (
+                <Button onClick={closeApproveModal}>Done</Button>
+              ) : (
+                <>
+                  <Button variant="tertiary" onClick={closeApproveModal} disabled={submitting}>Skip</Button>
+                  <Button onClick={handleCollectPayment} loading={submitting}>
+                    Collect &amp; Issue Receipt
+                  </Button>
+                </>
+              )
+            ) : (
+              <>
+                <Button variant="tertiary" onClick={closeApproveModal}>Cancel</Button>
+                <Button onClick={handleApprove} loading={submitting}>
+                  <CheckCircle2 className="w-4 h-4" /> Confirm Approval
+                </Button>
+              </>
+            )
           }
         >
+          {paymentContext ? (
+            payReceipt ? (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-emerald-50 p-5">
+                  <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Receipt</p>
+                  <p className="text-[1.125rem] font-bold text-emerald-900">{payReceipt.receiptNumber || '—'}</p>
+                  <p className="text-[0.75rem] text-emerald-700 mt-2">
+                    ₹{payReceipt.amount.toLocaleString('en-IN')} collected for {paymentContext.studentName}.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Select
+                  label="Fee Plan *"
+                  options={[
+                    { label: eligibleStructures.length ? 'Select fee plan...' : 'No fee plans for this year', value: '' },
+                    ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
+                  ]}
+                  value={selectedStructureId}
+                  onChange={(e) => setSelectedStructureId(e.target.value)}
+                  disabled={eligibleStructures.length === 0}
+                />
+                {selectedStructureId && structureLoading && (
+                  <p className="text-[0.6875rem] text-[var(--text-muted)]">Loading plan details...</p>
+                )}
+                {selectedStructureId && !structureLoading && structureDetail && !structureDetail.feeStructureItems.some((it) => /admission/i.test(it.feeHead?.name ?? '')) && (
+                  <div className="rounded-lg bg-amber-50 p-3">
+                    <p className="text-[0.6875rem] text-amber-800 leading-relaxed">
+                      This plan has no "Admission Fee" head — enter the amount manually.
+                    </p>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Amount (₹) *"
+                    type="number"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    placeholder="e.g. 5000"
+                  />
+                  <Input
+                    label="Category *"
+                    value={payCategory}
+                    onChange={(e) => setPayCategory(e.target.value)}
+                    placeholder="Admission Fee"
+                  />
+                </div>
+                <Select
+                  label="Payment mode *"
+                  options={paymentModeOptions}
+                  value={payMode}
+                  onChange={(e) => setPayMode(e.target.value as typeof payMode)}
+                />
+                {payMode !== 'cash' && (
+                  <Input
+                    label="Transaction reference"
+                    value={payTxnRef}
+                    onChange={(e) => setPayTxnRef(e.target.value)}
+                    placeholder="UPI ID / cheque no / etc."
+                  />
+                )}
+                <Input
+                  label="Remarks"
+                  value={payRemarks}
+                  onChange={(e) => setPayRemarks(e.target.value)}
+                  placeholder="Optional notes"
+                />
+                <div className="rounded-lg bg-blue-50 p-3">
+                  <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
+                    The selected plan will be linked to this student so future fees are owed against it.
+                  </p>
+                </div>
+              </div>
+            )
+          ) : (
           <div className="space-y-5">
             {/* Student info */}
             <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--card-bg-hover)]">
@@ -433,6 +698,7 @@ export default function ApprovalWorkflowPage() {
               </ul>
             </div>
           </div>
+          )}
         </Modal>
       )}
 

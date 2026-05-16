@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { enquiriesApi } from '@/services/modules/enquiries.api';
 import { applicationsApi, toApiGender } from '@/services/modules/applications.api';
 import { studentsApi } from '@/services/modules/students.api';
+import { ledgerApi } from '@/services/modules/ledger.api';
+import { paymentApi } from '@/services/modules/payment.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useStudentsStore } from '@/stores/students.store';
 import { useUIStore } from '@/stores/ui.store';
@@ -21,6 +23,17 @@ export interface ConvertEnquiryExtras {
   dateOfBirth: string;       // YYYY-MM-DD
   gender: 'male' | 'female' | 'other';
   academicYearId: string;
+}
+
+/** Input for the post-approve initial-payment collection flow. */
+export interface CollectInitialPaymentInput {
+  studentEnrollmentId: string;
+  academicYearId: string;
+  amount: number;
+  category: string;
+  paymentMode: string;
+  transactionRef?: string;
+  remarks?: string;
 }
 
 function resolveSchoolId(): string {
@@ -93,6 +106,13 @@ interface AdmissionsState {
   // ─── Approval actions ─────────────────────────
   approveApplication: (id: string, dto: ApproveApplicationDto) => Promise<Application>;
   rejectApplication: (id: string, reason: string) => Promise<void>;
+  /**
+   * Collect the initial admission payment for a freshly-approved student.
+   * Chains two API calls: POST /ledgers (Debit) then POST /payments referencing
+   * that ledger entry's id. Returns the created Payment so the UI can show the
+   * receipt number.
+   */
+  collectInitialPayment: (input: CollectInitialPaymentInput) => Promise<{ receiptNumber: string; amount: number }>;
 
   // ─── Documents ────────────────────────────────
   fetchApplicationDocuments: (appId: string) => Promise<void>;
@@ -400,6 +420,41 @@ export const useAdmissionsStore = create<AdmissionsState>((set, get) => ({
         a.id === id ? withDocCounts(updated, state.documentsByApp[id] ?? []) : a,
       ),
     }));
+  },
+
+  collectInitialPayment: async (input) => {
+    const schoolId = resolveSchoolId();
+    const { user } = useAuthStore.getState();
+    if (!user?.id) throw new Error('Not authenticated');
+
+    // 1. Create the Debit ledger entry (what's owed).
+    const debit = await ledgerApi.create(schoolId, {
+      studentEnrollmentId: input.studentEnrollmentId,
+      academicYearId: input.academicYearId,
+      entryType: 'Debit',
+      category: input.category,
+      amount: input.amount,
+      runningBalance: 0, // backend recomputes
+      reference: 'Initial admission payment',
+      paymentMode: input.paymentMode,
+      remarks: input.remarks ?? '',
+      createdById: user.id,
+    });
+
+    // 2. Create the Payment referencing the Debit entry. The backend creates the
+    //    corresponding Credit entry server-side, so we don't write a second ledger row.
+    const payment = await paymentApi.create(schoolId, {
+      studentEnrollmentId: input.studentEnrollmentId,
+      ledgerEntryId: debit.id,
+      amount: input.amount,
+      paymentMode: input.paymentMode,
+      transactionRef: input.transactionRef ?? '',
+      status: 'Success',
+      receiptNumber: '', // backend generates
+      paidAt: new Date().toISOString(),
+    });
+
+    return { receiptNumber: payment.receiptNumber, amount: Number(payment.amount) || input.amount };
   },
 
   // ─── Documents ────────────────────────────────

@@ -130,7 +130,7 @@ export default function ReportViewerPage() {
                       {report.columns.map((col) => {
                         const val = row[col.key];
                         const isNumber = typeof val === 'number';
-                        const displayVal = isNumber && col.align === 'right' && col.key !== 'daysSincePayment' && col.key !== 'students' && col.key !== 'totalStudents' && col.key !== 'presentToday' && col.key !== 'absentToday' && col.key !== 'appeared' && col.key !== 'passed' && col.key !== 'failed' && col.key !== 'distinction'
+                        const displayVal = isNumber && col.align === 'right' && col.key !== 'daysSincePayment' && col.key !== 'students' && col.key !== 'totalStudents' && col.key !== 'presentToday' && col.key !== 'absentToday' && col.key !== 'lateToday' && col.key !== 'appeared' && col.key !== 'passed' && col.key !== 'failed' && col.key !== 'distinction'
                           ? fmtCurrency(val)
                           : val;
                         return (
