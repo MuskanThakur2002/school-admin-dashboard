@@ -54,13 +54,13 @@ export default function ParentListPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
-    if (!confirm(`Delete parent ${name}?`)) return;
+    if (!confirm(`Delete guardian ${name}?`)) return;
     try {
       await deleteParent(id);
-      showToast({ type: 'info', title: 'Parent deleted', message: name });
+      showToast({ type: 'info', title: 'Guardian deleted', message: name });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      showToast({ type: 'error', title: 'Failed to delete parent', message });
+      showToast({ type: 'error', title: 'Failed to delete guardian', message });
     }
   };
 
@@ -69,8 +69,8 @@ export default function ParentListPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Parents</h1>
-          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} parents on record</p>
+          <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Guardians</h1>
+          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} guardians on record</p>
         </div>
         <div className="flex gap-2.5">
           <button className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[0.8125rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
@@ -82,7 +82,7 @@ export default function ParentListPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add Parent
+            Add Guardian
           </button>
         </div>
       </div>
@@ -91,7 +91,7 @@ export default function ParentListPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[0.75rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em]">Total Parents</span>
+            <span className="text-[0.75rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em]">Total Guardians</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <Users className="w-4 h-4" strokeWidth={2} />
             </div>
@@ -131,14 +131,14 @@ export default function ParentListPage() {
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="grid grid-cols-[2.5fr_2fr_1.2fr_1.2fr_0.4fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Parent', 'Email', 'Phone', 'Annual Income', ''].map((h) => (
+          {['Guardian', 'Email', 'Phone', 'Annual Income', ''].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
 
         {loading && (
           <div className="py-16 text-center">
-            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading parents...</p>
+            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading guardians...</p>
           </div>
         )}
 
@@ -183,7 +183,7 @@ export default function ParentListPage() {
               <button
                 onClick={(e) => handleDelete(e, parent.id, name)}
                 className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors justify-self-end"
-                aria-label="Delete parent"
+                aria-label="Delete guardian"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -194,8 +194,8 @@ export default function ParentListPage() {
         {!loading && filteredData.length === 0 && (
           <div className="py-16 text-center">
             <Search className="w-10 h-10 text-[#e2e8f0] mx-auto mb-3" />
-            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No parents found</p>
-            <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">{search ? 'Try adjusting your search' : 'Add your first parent to get started'}</p>
+            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No guardians found</p>
+            <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">{search ? 'Try adjusting your search' : 'Add your first guardian to get started'}</p>
           </div>
         )}
 
@@ -206,7 +206,7 @@ export default function ParentListPage() {
           onPageChange={(p) => fetchParents(p, limit)}
           onLimitChange={(l) => fetchParents(1, l)}
           pageSizeOptions={[1, 10, 25, 50, 100]}
-          label="parents"
+          label="guardians"
         />
       </div>
 
@@ -214,8 +214,8 @@ export default function ParentListPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onCreate={createParent}
-        onSuccess={(name) => showToast({ type: 'success', title: 'Parent added', message: name })}
-        onError={(message) => showToast({ type: 'error', title: 'Failed to add parent', message })}
+        onSuccess={(name) => showToast({ type: 'success', title: 'Guardian added', message: name })}
+        onError={(message) => showToast({ type: 'error', title: 'Failed to add guardian', message })}
       />
     </div>
   );
@@ -261,7 +261,6 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
 
   const canSubmit =
     form.name.trim() &&
-    form.email.trim() &&
     form.password.trim() &&
     incomeValid;
 
@@ -296,14 +295,14 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
     <Modal
       open={open}
       onOpenChange={handleClose}
-      title="Add Parent"
-      description="Creates a user account, then links them as a parent."
+      title="Add Guardian"
+      description="Creates a user account, then links them as a guardian."
       size="lg"
       footer={
         <>
           <Button variant="tertiary" onClick={() => handleClose(false)} disabled={saving}>Cancel</Button>
           <Button variant="primary" onClick={handleSubmit} loading={saving} disabled={!canSubmit}>
-            Create Parent
+            Create Guardian
           </Button>
         </>
       }
@@ -313,7 +312,7 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Rajesh Patel" />
-            <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="parent@example.com" />
+            <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="guardian@example.com" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
             <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9876543210" />
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9876543210" />
@@ -324,7 +323,7 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
         </div>
 
         <div>
-          <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Parent details</p>
+          <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Guardian details</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Annual income (INR) *"

@@ -19,7 +19,7 @@ import { useClassOptions } from '@/hooks/useClassOptions';
 // ─── Step definitions ──────────────────────────────────────────
 const steps = [
   { id: 'student', label: 'Student Details', icon: User },
-  { id: 'parent', label: 'Parent', icon: Users },
+  { id: 'parent', label: 'Guardian', icon: Users },
   { id: 'address', label: 'Address', icon: MapPin },
   { id: 'review', label: 'Review', icon: FileText },
 ] as const;
@@ -101,8 +101,8 @@ export default function NewAdmissionPage() {
   };
 
   const handleCreateParent = async () => {
-    if (!parentName.trim() || !parentEmail.trim() || !newParentPassword.trim()) {
-      showToast({ type: 'error', title: 'Missing fields', message: 'Name, email, and password are required.' });
+    if (!parentName.trim() || !newParentPassword.trim()) {
+      showToast({ type: 'error', title: 'Missing fields', message: 'Name and password are required.' });
       return;
     }
     setCreatingParent(true);
@@ -122,8 +122,8 @@ export default function NewAdmissionPage() {
       });
       showToast({
         type: 'success',
-        title: 'Parent created',
-        message: `Initial password: ${newParentPassword} (share with the parent).`,
+        title: 'Guardian created',
+        message: `Initial password: ${newParentPassword} (share with the guardian).`,
       });
       // Switch to pick mode with the new parent selected.
       setParentMode('pick');
@@ -131,7 +131,7 @@ export default function NewAdmissionPage() {
       setNewParentPassword(Math.random().toString(36).slice(2, 12));
       setNewParentAnnualIncome('');
     } catch (err) {
-      showToast({ type: 'error', title: 'Failed to create parent', message: (err as Error).message });
+      showToast({ type: 'error', title: 'Failed to create guardian', message: (err as Error).message });
     } finally {
       setCreatingParent(false);
     }
@@ -147,13 +147,12 @@ export default function NewAdmissionPage() {
     }
     if (step === 'parent') {
       if (parentMode === 'pick') {
-        if (!selectedParentId) return 'Please pick a parent or switch to "Create new"';
+        if (!selectedParentId) return 'Please pick a guardian or switch to "Create new"';
       }
       if (parentMode === 'create') {
-        if (!parentName.trim()) return 'Parent name is required';
-        if (!parentEmail.trim()) return 'Parent email is required';
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) return 'Parent email is not valid';
-        return 'Please click "Create parent" before continuing';
+        if (!parentName.trim()) return 'Guardian name is required';
+        if (parentEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) return 'Guardian email is not valid';
+        return 'Please click "Create guardian" before continuing';
       }
     }
     if (step === 'address') {
@@ -324,9 +323,9 @@ export default function NewAdmissionPage() {
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-[1rem] font-bold text-[var(--text-primary)] mb-1">Parent / Guardian</h2>
+                <h2 className="text-[1rem] font-bold text-[var(--text-primary)] mb-1">Guardian</h2>
                 <p className="text-[0.75rem] text-[var(--text-muted)]">
-                  Pick an existing parent, or create a new one. The student will be linked to this parent on approval.
+                  Pick an existing guardian, or create a new one. The student will be linked to this guardian on approval.
                 </p>
               </div>
               {parentMode === 'pick' ? (
@@ -360,14 +359,14 @@ export default function NewAdmissionPage() {
             {parentMode === 'pick' && (
               <>
                 <Select
-                  label="Existing parent *"
+                  label="Existing guardian *"
                   options={parentOptions}
                   value={selectedParentId}
                   onChange={(e) => handlePickParent(e.target.value)}
                 />
                 {selectedParentId && (
                   <div className="rounded-xl bg-emerald-50 p-4">
-                    <p className="text-[0.6875rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-2">Linked parent</p>
+                    <p className="text-[0.6875rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-2">Linked guardian</p>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <p className="text-[0.625rem] text-emerald-700 uppercase mb-0.5">Name</p>
@@ -387,7 +386,7 @@ export default function NewAdmissionPage() {
                 {parents.length === 0 && (
                   <div className="rounded-xl bg-amber-50 p-3">
                     <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
-                      No parents in the system yet. Click <strong>+ Create new</strong> above to add one.
+                      No guardians in the system yet. Click <strong>+ Create new</strong> above to add one.
                     </p>
                   </div>
                 )}
@@ -398,14 +397,14 @@ export default function NewAdmissionPage() {
               <div className="rounded-xl bg-[var(--card-bg-hover)] p-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#002c98]" />
-                  <p className="text-[0.8125rem] font-bold text-[var(--text-primary)]">New parent details</p>
+                  <p className="text-[0.8125rem] font-bold text-[var(--text-primary)]">New guardian details</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Full Name *" value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="e.g. Rajesh Mehta" />
                   <Input label="Phone" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="e.g. 9876543210" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input label="Email *" type="email" value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} placeholder="e.g. parent@email.com" />
+                  <Input label="Email" type="email" value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} placeholder="e.g. guardian@email.com" />
                   <Input
                     label="Initial password *"
                     value={newParentPassword}
@@ -424,7 +423,7 @@ export default function NewAdmissionPage() {
                   loading={creatingParent}
                   className="w-full"
                 >
-                  <UserPlus className="w-4 h-4" /> Create parent
+                  <UserPlus className="w-4 h-4" /> Create guardian
                 </Button>
               </div>
             )}

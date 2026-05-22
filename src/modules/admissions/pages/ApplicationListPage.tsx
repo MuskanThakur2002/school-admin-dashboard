@@ -501,7 +501,7 @@ export default function ApplicationListPage() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
           <input
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by student or parent name..."
+            placeholder="Search by student or guardian name..."
             className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
           />
           {search && (
@@ -743,7 +743,7 @@ export default function ApplicationListPage() {
                         const linkedParent = parents.find((p) => p.id === assignedParentId);
                         return linkedParent ? (
                           <div className="rounded-lg bg-emerald-50 p-3">
-                            <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-0.5">Parent linked</p>
+                            <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-0.5">Guardian linked</p>
                             <p className="text-[0.75rem] font-semibold text-emerald-900">
                               {linkedParent.user?.name ?? '—'}
                               {linkedParent.user?.email ? ` · ${linkedParent.user.email}` : ''}
@@ -751,9 +751,9 @@ export default function ApplicationListPage() {
                           </div>
                         ) : (
                           <div className="rounded-lg bg-amber-50 p-3">
-                            <p className="text-[0.625rem] font-semibold text-amber-800 uppercase tracking-[0.06em] mb-0.5">No parent linked</p>
+                            <p className="text-[0.625rem] font-semibold text-amber-800 uppercase tracking-[0.06em] mb-0.5">No guardian linked</p>
                             <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
-                              No parent matched this application's phone or email. Student will be created without a parent link — fix from Students later.
+                              No guardian matched this application's phone or email. Student will be created without a guardian link — fix from Students later.
                             </p>
                           </div>
                         );
@@ -803,7 +803,7 @@ export default function ApplicationListPage() {
                         placeholder="e.g. Incomplete documents after follow-up"
                       />
                       <p className="text-[0.6875rem] text-[var(--text-muted)]">
-                        The parent will be notified and this application will be archived.
+                        The guardian will be notified and this application will be archived.
                       </p>
                       <div className="flex gap-2">
                         <Button variant="tertiary" onClick={() => { setShowRejectForm(false); setRejectionReason(''); }}>Cancel</Button>
@@ -980,7 +980,7 @@ export default function ApplicationListPage() {
                   <DrawerField icon={User} label="Student" value={selectedApp.studentName} />
                   <DrawerField icon={GraduationCap} label="Class Applied" value={`Class ${selectedApp.classApplied}`} />
                   <DrawerField icon={Calendar} label="Applied" value={selectedApp.appliedDate} />
-                  <DrawerField icon={User} label="Parent" value={selectedApp.parentName} />
+                  <DrawerField icon={User} label="Guardian" value={selectedApp.parentName} />
                   <DrawerField icon={Phone} label="Phone" value={selectedApp.parentPhone} />
                   <DrawerField icon={Mail} label="Email" value={selectedApp.parentEmail || '—'} />
                   {selectedApp.previousSchool && (

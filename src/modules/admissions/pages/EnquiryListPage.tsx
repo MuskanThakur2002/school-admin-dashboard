@@ -124,7 +124,7 @@ export default function EnquiryListPage() {
 
   const handleCreate = async () => {
     if (!formStudent || !formParent || !formPhone || !formClass) {
-      showToast({ type: 'error', title: 'Missing fields', message: 'Student, parent, phone, and class are required' });
+      showToast({ type: 'error', title: 'Missing fields', message: 'Student, guardian, phone, and class are required' });
       return;
     }
     setSubmitting(true);
@@ -243,7 +243,7 @@ export default function EnquiryListPage() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
           <input
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by student or parent name..."
+            placeholder="Search by student or guardian name..."
             className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
           />
           {search && (
@@ -266,7 +266,7 @@ export default function EnquiryListPage() {
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="grid grid-cols-[3fr_3fr_1.5fr_2fr_2fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Student', 'Parent / Contact', 'Class', 'Source', 'Status'].map((h) => (
+          {['Student', 'Guardian / Contact', 'Class', 'Source', 'Status'].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
@@ -371,10 +371,10 @@ export default function EnquiryListPage() {
             <Input label="Student Name *" value={formStudent} onChange={(e) => setFormStudent(e.target.value)} placeholder="e.g. Aarav Mehta" />
             <Input label="Class Interest *" value={formClass} onChange={(e) => setFormClass(e.target.value)} placeholder="e.g. V" />
           </div>
-          <Input label="Parent / Guardian Name *" value={formParent} onChange={(e) => setFormParent(e.target.value)} placeholder="e.g. Deepak Mehta" />
+          <Input label="Guardian Name *" value={formParent} onChange={(e) => setFormParent(e.target.value)} placeholder="e.g. Deepak Mehta" />
           <div className="grid grid-cols-2 gap-4">
             <Input label="Phone *" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="e.g. 9812345678" />
-            <Input label="Email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="e.g. parent@email.com" />
+            <Input label="Email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="e.g. guardian@email.com" />
           </div>
           <Select label="Source" options={sourceOptions} value={formSource} onChange={(e) => setFormSource(e.target.value)} />
           <Input label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Any additional details..." />
@@ -416,7 +416,7 @@ export default function EnquiryListPage() {
               {[
                 { label: 'Student', value: selectedEnquiry.studentName },
                 { label: 'Class Interest', value: `Class ${selectedEnquiry.classInterest}` },
-                { label: 'Parent / Guardian', value: selectedEnquiry.parentName },
+                { label: 'Guardian', value: selectedEnquiry.parentName },
                 { label: 'Phone', value: selectedEnquiry.parentPhone },
                 { label: 'Email', value: selectedEnquiry.parentEmail || '—' },
                 { label: 'Source', value: selectedEnquiry.source || '—' },

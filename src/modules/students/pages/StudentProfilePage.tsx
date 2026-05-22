@@ -326,18 +326,16 @@ export default function StudentProfilePage() {
             <Field label="Enrolment Date" value={student.enrollmentDate || ''} />
             <Field label="Current Class" value={currentEnrollmentLabel || (enrollmentsLoading ? 'Loading…' : 'Not enrolled')} />
             <Field label="Roll Number" value={currentEnrollment ? String(currentEnrollment.rollNumber) : ''} />
-            <Field label="Application ID" value={student.applicationId || ''} />
           </div>
         </SectionCard>
 
-        <SectionCard title="Parent" icon={Users}>
+        <SectionCard title="Guardian" icon={Users}>
           <div className="grid grid-cols-1 gap-x-6">
-            <Field label="Parent ID" value={student.parentId} />
             <button
               onClick={() => navigate(`/parents/${student.parentId}`)}
               className="mt-1 text-left text-[0.75rem] font-semibold text-[#002c98] hover:underline"
             >
-              View parent profile →
+              View guardian profile →
             </button>
           </div>
         </SectionCard>

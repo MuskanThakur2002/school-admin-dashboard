@@ -142,7 +142,6 @@ export default function TeacherProfilePage() {
             <Field label="Name" value={name} />
             <Field label="Email" value={email} />
             <Field label="Phone" value={phone} />
-            <Field label="User ID" value={teacher.userId} />
           </div>
         </SectionCard>
         <SectionCard title="Employment" icon={Briefcase}>
@@ -223,7 +222,6 @@ function EditTeacherModal({ open, onOpenChange, teacher, onSave, onError }: Edit
 
   const canSubmit =
     form.name.trim() &&
-    form.email.trim() &&
     form.employeeId.trim() &&
     form.hireDate.trim() &&
     !loadingUser;
@@ -280,7 +278,7 @@ function EditTeacherModal({ open, onOpenChange, teacher, onSave, onError }: Edit
             <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} />
-              <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
+              <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
               <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} />
               <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} />
               <div className="md:col-span-2">

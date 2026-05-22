@@ -252,7 +252,6 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
 
   const canSubmit =
     form.name.trim() &&
-    form.email.trim() &&
     form.password.trim() &&
     form.employeeId.trim() &&
     form.hireDate;
@@ -306,7 +305,7 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Pramod Kumar" />
-            <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="teacher@school.edu" />
+            <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="teacher@school.edu" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
             <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9311314401" />
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9311314401" />

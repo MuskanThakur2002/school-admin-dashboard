@@ -453,11 +453,11 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
             options={genderOptions}
           />
           <Select
-            label="Parent *"
+            label="Guardian *"
             value={form.parentId}
             onChange={(e) => update('parentId', e.target.value)}
             options={parentOptions}
-            placeholder={parents.length === 0 ? 'Loading parents...' : 'Select a parent'}
+            placeholder={parents.length === 0 ? 'Loading guardians...' : 'Select a guardian'}
           />
           <Input
             label="Status *"

@@ -72,7 +72,7 @@ export default function ParentProfilePage() {
     return (
       <div className="max-w-[1280px]">
         <div className="bg-[var(--card-bg)] rounded-2xl py-16 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <p className="text-[0.875rem] text-[var(--text-muted)]">Loading parent profile...</p>
+          <p className="text-[0.875rem] text-[var(--text-muted)]">Loading guardian profile...</p>
         </div>
       </div>
     );
@@ -85,11 +85,11 @@ export default function ParentProfilePage() {
           onClick={() => navigate('/parents')}
           className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors mb-6"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Parents
+          <ArrowLeft className="w-4 h-4" /> Back to Guardians
         </button>
         <div className="bg-[var(--card-bg)] rounded-2xl py-16 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <p className="text-[0.875rem] font-semibold text-red-600 mb-1">Parent not found</p>
-          <p className="text-[0.75rem] text-[var(--text-muted)]">{error || `No parent found with ID: ${id}`}</p>
+          <p className="text-[0.875rem] font-semibold text-red-600 mb-1">Guardian not found</p>
+          <p className="text-[0.75rem] text-[var(--text-muted)]">{error || 'No matching guardian.'}</p>
         </div>
       </div>
     );
@@ -112,7 +112,7 @@ export default function ParentProfilePage() {
           onClick={() => navigate('/parents')}
           className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--text-muted)] hover:text-[#002c98] transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Parents
+          <ArrowLeft className="w-4 h-4" /> Back to Guardians
         </button>
         <button
           onClick={() => setEditOpen(true)}
@@ -151,13 +151,11 @@ export default function ParentProfilePage() {
             <Field label="Name" value={name} />
             <Field label="Email" value={email} />
             <Field label="Phone" value={phone} />
-            <Field label="User ID" value={parent.userId} />
           </div>
         </SectionCard>
-        <SectionCard title="Parent details" icon={Wallet}>
+        <SectionCard title="Guardian details" icon={Wallet}>
           <div className="grid grid-cols-2 gap-x-6">
             <Field label="Annual Income" value={formatIncome(parent.annualIncome)} />
-            <Field label="Parent ID" value={parent.id} />
             <Field label="Created" value={parent.createdAt?.split('T')[0] ?? ''} />
             <Field label="Updated" value={parent.updatedAt?.split('T')[0] ?? ''} />
           </div>
@@ -171,9 +169,9 @@ export default function ParentProfilePage() {
         onSave={async (input) => {
           const updated = await updateParent(parent.id, input);
           setParent(updated);
-          showToast({ type: 'success', title: 'Parent updated', message: updated.user?.name ?? '' });
+          showToast({ type: 'success', title: 'Guardian updated', message: updated.user?.name ?? '' });
         }}
-        onError={(message) => showToast({ type: 'error', title: 'Failed to update parent', message })}
+        onError={(message) => showToast({ type: 'error', title: 'Failed to update guardian', message })}
       />
     </div>
   );
@@ -231,7 +229,7 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
 
   const incomeNumber = Number(form.annualIncome);
   const incomeValid = form.annualIncome.trim() !== '' && Number.isFinite(incomeNumber) && incomeNumber >= 0;
-  const canSubmit = form.name.trim() && form.email.trim() && incomeValid && !loadingUser;
+  const canSubmit = form.name.trim() && incomeValid && !loadingUser;
 
   const handleSubmit = async () => {
     if (!canSubmit || saving) return;
@@ -264,8 +262,8 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Edit Parent"
-      description="Update the parent's account and parent details."
+      title="Edit Guardian"
+      description="Update the guardian's account and details."
       size="lg"
       footer={
         <>
@@ -277,14 +275,14 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
       }
     >
       {loadingUser ? (
-        <p className="text-[0.8125rem] text-[var(--text-muted)] py-6 text-center">Loading parent details...</p>
+        <p className="text-[0.8125rem] text-[var(--text-muted)] py-6 text-center">Loading guardian details...</p>
       ) : (
         <div className="space-y-5">
           <div>
             <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} />
-              <Input label="Email *" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
+              <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
               <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} />
               <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} />
               <div className="md:col-span-2">
@@ -294,7 +292,7 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
           </div>
 
           <div>
-            <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Parent details</p>
+            <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Guardian details</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
                 label="Annual income (INR) *"

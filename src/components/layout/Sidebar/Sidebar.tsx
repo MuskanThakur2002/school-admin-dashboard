@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { label: 'Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
   { label: 'Homework', path: '/homework', icon: NotebookPen, permission: 'homework.read' },
   { label: 'Assessments', path: '/assessments', icon: ListChecks, permission: 'assessments.read' },
-  { label: 'Parents', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
+  { label: 'Guardians', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
   { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read', end: true },
   { label: 'Fee Assignments', path: '/fees/assignments', icon: ClipboardList, permission: 'fees.read' },
   { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },
