@@ -7,6 +7,7 @@ import type {
   PaginatedListParams,
   PaginatedListResponse,
   UpdateNotificationDto,
+  UpdateNotificationTemplateDto,
 } from '@/types/notification.types';
 
 interface ApiEnvelope<T> {
@@ -43,6 +44,14 @@ export const notificationTemplatesApi = {
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
+  /** GET /schools/:schoolId/notification-templates/:id */
+  getById: async (schoolId: string, id: string): Promise<NotificationTemplate> => {
+    const res = await api.get<ApiEnvelope<NotificationTemplate>>(
+      `/schools/${schoolId}/notification-templates/${id}`,
+    );
+    return res.data;
+  },
+
   /** POST /schools/:schoolId/notification-templates */
   create: async (
     schoolId: string,
@@ -50,6 +59,19 @@ export const notificationTemplatesApi = {
   ): Promise<NotificationTemplate> => {
     const res = await api.post<ApiEnvelope<NotificationTemplate>>(
       `/schools/${schoolId}/notification-templates`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/notification-templates/:id */
+  update: async (
+    schoolId: string,
+    id: string,
+    body: UpdateNotificationTemplateDto,
+  ): Promise<NotificationTemplate> => {
+    const res = await api.put<ApiEnvelope<NotificationTemplate>>(
+      `/schools/${schoolId}/notification-templates/${id}`,
       { schoolId, ...body },
     );
     return res.data;
@@ -88,6 +110,18 @@ export const notificationsApi = {
     const res = await api.post<ApiEnvelope<Notification>>(
       `/schools/${schoolId}/notifications`,
       { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** POST /schools/:schoolId/notifications (bulk — array body, transactional) */
+  createBulk: async (
+    schoolId: string,
+    items: CreateNotificationDto[],
+  ): Promise<Notification[]> => {
+    const res = await api.post<ApiEnvelope<Notification[]>>(
+      `/schools/${schoolId}/notifications`,
+      items,
     );
     return res.data;
   },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Send, MessageSquare, Mail, Smartphone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Send, MessageSquare, Mail, Smartphone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -36,9 +36,11 @@ export default function TemplateListPage() {
   const error = useNotificationsStore((s) => s.templatesError);
   const fetchTemplates = useNotificationsStore((s) => s.fetchTemplates);
   const createTemplate = useNotificationsStore((s) => s.createTemplate);
+  const updateTemplate = useNotificationsStore((s) => s.updateTemplate);
   const deleteTemplate = useNotificationsStore((s) => s.deleteTemplate);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<NotificationTemplate | null>(null);
   const [sendTemplate, setSendTemplate] = useState<NotificationTemplate | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formName, setFormName] = useState('');
@@ -69,24 +71,51 @@ export default function TemplateListPage() {
     setFormSubject('');
     setFormBody('');
     setFormTriggerEvent('');
+    setEditing(null);
   };
 
-  const handleAdd = async () => {
+  const openEditModal = (t: NotificationTemplate) => {
+    setEditing(t);
+    setFormName(t.name);
+    setFormChannel(t.channel);
+    setFormSubject(t.subject ?? '');
+    setFormBody(t.body);
+    setFormTriggerEvent(t.triggerEvent ?? '');
+    setModalOpen(true);
+  };
+
+  const handleSubmit = async () => {
     if (!formName.trim() || !formBody.trim()) return;
     setSubmitting(true);
     try {
-      await createTemplate({
+      const payload = {
         name: formName.trim(),
         channel: formChannel,
         body: formBody,
-        ...(formSubject.trim() ? { subject: formSubject.trim() } : {}),
-        ...(formTriggerEvent.trim() ? { triggerEvent: formTriggerEvent.trim() } : {}),
-      });
-      showToast({ type: 'success', title: 'Template created', message: formName });
+        // Always send subject + triggerEvent on edit so clearing the field
+        // propagates; on create, omit empties so they default server-side.
+        ...(editing
+          ? { subject: formSubject.trim() || undefined, triggerEvent: formTriggerEvent.trim() || undefined }
+          : {
+              ...(formSubject.trim() ? { subject: formSubject.trim() } : {}),
+              ...(formTriggerEvent.trim() ? { triggerEvent: formTriggerEvent.trim() } : {}),
+            }),
+      };
+      if (editing) {
+        await updateTemplate(editing.id, payload);
+        showToast({ type: 'success', title: 'Template updated', message: payload.name });
+      } else {
+        await createTemplate(payload);
+        showToast({ type: 'success', title: 'Template created', message: payload.name });
+      }
       setModalOpen(false);
       resetForm();
     } catch (err) {
-      showToast({ type: 'error', title: 'Failed to create template', message: (err as Error).message });
+      showToast({
+        type: 'error',
+        title: editing ? 'Failed to update template' : 'Failed to create template',
+        message: (err as Error).message,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -152,6 +181,9 @@ export default function TemplateListPage() {
                 <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => setSendTemplate(template)} className="p-1.5 rounded-lg hover:bg-[#002c98]/10 text-[var(--text-muted)] hover:text-[#002c98]" title="Send to recipients">
                     <Send className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => openEditModal(template)} className="p-1.5 rounded-lg hover:bg-[#002c98]/10 text-[var(--text-muted)] hover:text-[#002c98]" title="Edit template">
+                    <Pencil className="w-3.5 h-3.5" />
                   </button>
                   <button onClick={() => handleDelete(template)} className="p-1.5 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-red-500" title="Delete template">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -220,13 +252,15 @@ export default function TemplateListPage() {
       <Modal
         open={modalOpen}
         onOpenChange={(o) => { setModalOpen(o); if (!o) resetForm(); }}
-        title="Create Template"
-        description="Define a notification template with variables"
+        title={editing ? 'Edit Template' : 'Create Template'}
+        description={editing ? 'Update name, channel, body, or trigger event.' : 'Define a notification template with variables'}
         footer={
           <>
             <Button variant="tertiary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={submitting || !formName.trim() || !formBody.trim()}>
-              {submitting ? 'Creating…' : 'Create Template'}
+            <Button onClick={handleSubmit} disabled={submitting || !formName.trim() || !formBody.trim()}>
+              {submitting
+                ? (editing ? 'Saving…' : 'Creating…')
+                : (editing ? 'Save Changes' : 'Create Template')}
             </Button>
           </>
         }

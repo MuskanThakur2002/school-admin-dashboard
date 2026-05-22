@@ -14,6 +14,7 @@ import type {
   CreateFeeStructureItemDto, UpdateFeeStructureItemDto,
   CreateFeeInstallmentDto, UpdateFeeInstallmentDto,
   CreateFeeAssignmentDto, UpdateFeeAssignmentDto,
+  BulkClassAssignmentDto, BulkClassAssignmentResult,
   InstallmentPlan, Concession, LateFeeRule,
   CreateInstallmentPlanDto, CreateConcessionDto, CreateLateFeeRuleDto,
 } from '@/types/fee.types';
@@ -203,6 +204,14 @@ export const feeApi = {
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
+  /** GET /schools/:schoolId/fee-structure-items/:id */
+  getItem: async (schoolId: string, id: string): Promise<FeeStructureItem> => {
+    const res = await api.get<ApiEnvelope<FeeStructureItem>>(
+      `/schools/${schoolId}/fee-structure-items/${id}`,
+    );
+    return res.data;
+  },
+
   /** POST /schools/:schoolId/fee-structure-items */
   createItem: async (
     schoolId: string,
@@ -240,6 +249,14 @@ export const feeApi = {
       `/schools/${schoolId}/fee-installments${buildQuery(params)}`,
     );
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
+  },
+
+  /** GET /schools/:schoolId/fee-installments/:id */
+  getInstallment: async (schoolId: string, id: string): Promise<FeeInstallment> => {
+    const res = await api.get<ApiEnvelope<FeeInstallment>>(
+      `/schools/${schoolId}/fee-installments/${id}`,
+    );
+    return res.data;
   },
 
   /** POST /schools/:schoolId/fee-installments */
@@ -283,6 +300,14 @@ export const feeApi = {
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
+  /** GET /schools/:schoolId/fee-assignments/:id */
+  getAssignment: async (schoolId: string, id: string): Promise<FeeAssignment> => {
+    const res = await api.get<ApiEnvelope<FeeAssignment>>(
+      `/schools/${schoolId}/fee-assignments/${id}`,
+    );
+    return res.data;
+  },
+
   /** POST /schools/:schoolId/fee-assignments */
   createAssignment: async (
     schoolId: string,
@@ -311,6 +336,32 @@ export const feeApi = {
   /** DELETE /schools/:schoolId/fee-assignments/:id */
   deleteAssignment: async (schoolId: string, id: string): Promise<void> => {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/fee-assignments/${id}`);
+  },
+
+  /**
+   * POST /schools/:schoolId/fee-assignments/bulk-class
+   * Assigns one fee structure to every enrollment in a class section.
+   * Response shape varies — backend may return an array of assignments or
+   * { created, assignments }. Normalize both into BulkClassAssignmentResult.
+   */
+  bulkAssignByClass: async (
+    schoolId: string,
+    body: BulkClassAssignmentDto,
+  ): Promise<BulkClassAssignmentResult> => {
+    const res = await api.post<ApiEnvelope<unknown>>(
+      `/schools/${schoolId}/fee-assignments/bulk-class`,
+      { schoolId, ...body },
+    );
+    const data = res.data;
+    if (Array.isArray(data)) {
+      return { created: data.length, assignments: data as FeeAssignment[] };
+    }
+    if (data && typeof data === 'object') {
+      const obj = data as { created?: number; assignments?: FeeAssignment[] };
+      const assignments = obj.assignments ?? [];
+      return { created: obj.created ?? assignments.length, assignments };
+    }
+    return { created: 0, assignments: [] };
   },
 
   // ─── Installment Plans (mock — Phase 2) ─────────────────

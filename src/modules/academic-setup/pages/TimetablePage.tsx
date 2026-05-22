@@ -1,13 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, ArrowLeft, Plus, Trash2, Calendar } from 'lucide-react';
+import { Clock, ArrowLeft, Plus, Trash2, Calendar, AlertTriangle } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Select } from '@/components/ui/Select/Select';
-import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAcademicStore } from '@/stores/academic.store';
+import { useTeacherStore } from '@/stores/teacher.store';
 import { academicApi } from '@/services/modules/academic.api';
 import type { TimetableSlot, DayOfWeek } from '@/types/academic.types';
 
@@ -17,6 +17,8 @@ const days: { id: DayOfWeek; label: string; short: string }[] = [
   { id: 'wednesday', label: 'Wednesday', short: 'Wed' },
   { id: 'thursday', label: 'Thursday', short: 'Thu' },
   { id: 'friday', label: 'Friday', short: 'Fri' },
+  { id: 'saturday', label: 'Saturday', short: 'Sat' },
+  { id: 'sunday', label: 'Sunday', short: 'Sun' },
 ];
 
 const subjectColors: Record<string, string> = {
@@ -40,31 +42,39 @@ export default function TimetablePage() {
   const navigate = useNavigate();
   const classes = useAcademicStore((s) => s.classes);
   const subjects = useAcademicStore((s) => s.subjects);
+  const years = useAcademicStore((s) => s.years);
   const fetchClasses = useAcademicStore((s) => s.fetchClasses);
   const fetchSubjects = useAcademicStore((s) => s.fetchSubjects);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
   const setTimetableSlot = useAcademicStore((s) => s.setTimetableSlot);
   const clearTimetableSlot = useAcademicStore((s) => s.clearTimetableSlot);
+  const teachers = useTeacherStore((s) => s.teachers);
+  const fetchTeachers = useTeacherStore((s) => s.fetchTeachers);
   const showToast = useUIStore((s) => s.showToast);
 
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
+  const [hiddenSlotCount, setHiddenSlotCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorDay, setEditorDay] = useState<DayOfWeek>('monday');
   const [editorPeriod, setEditorPeriod] = useState(1);
   const [formSubjectId, setFormSubjectId] = useState('');
-  const [formTeacher, setFormTeacher] = useState('');
+  const [formTeacherId, setFormTeacherId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const periods = useMemo(() => academicApi.getPeriods(), []);
+  const activeYear = useMemo(() => years.find((y) => y.isCurrent), [years]);
 
   // Initial fetch
   useEffect(() => {
     if (classes.length === 0) fetchClasses();
     if (subjects.length === 0) fetchSubjects();
-  }, [classes.length, subjects.length, fetchClasses, fetchSubjects]);
+    if (years.length === 0) fetchYears();
+    if (teachers.length === 0) fetchTeachers(1, 200);
+  }, [classes.length, subjects.length, years.length, teachers.length, fetchClasses, fetchSubjects, fetchYears, fetchTeachers]);
 
   // Auto-pick first class + section
   useEffect(() => {
@@ -79,11 +89,15 @@ export default function TimetablePage() {
   useEffect(() => {
     if (!selectedClassId || !selectedSectionId) {
       setSlots([]);
+      setHiddenSlotCount(0);
       return;
     }
     setLoading(true);
-    academicApi.getTimetable(selectedClassId, selectedSectionId)
-      .then(setSlots)
+    academicApi.getTimetable(selectedSectionId)
+      .then(({ slots, hiddenSlotCount }) => {
+        setSlots(slots);
+        setHiddenSlotCount(hiddenSlotCount);
+      })
       .finally(() => setLoading(false));
   }, [selectedClassId, selectedSectionId]);
 
@@ -105,13 +119,17 @@ export default function TimetablePage() {
     setEditorDay(day);
     setEditorPeriod(period);
     setFormSubjectId(existing?.subjectId || '');
-    setFormTeacher(existing?.teacher || '');
+    setFormTeacherId(existing?.teacherId || '');
     setEditorOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formSubjectId || !formTeacher) {
+    if (!formSubjectId || !formTeacherId) {
       showToast({ type: 'error', title: 'Missing fields', message: 'Subject and teacher are required' });
+      return;
+    }
+    if (!activeYear) {
+      showToast({ type: 'error', title: 'No active year', message: 'Set an academic year as current first' });
       return;
     }
     const subject = subjects.find((s) => s.id === formSubjectId);
@@ -119,15 +137,26 @@ export default function TimetablePage() {
       showToast({ type: 'error', title: 'Subject not found', message: 'Pick a valid subject' });
       return;
     }
+    const teacher = teachers.find((t) => t.id === formTeacherId);
+    if (!teacher) {
+      showToast({ type: 'error', title: 'Teacher not found', message: 'Pick a valid teacher' });
+      return;
+    }
     setSubmitting(true);
     try {
+      const existing = findSlot(editorDay, editorPeriod);
       await setTimetableSlot({
-        classId: selectedClassId, sectionId: selectedSectionId,
+        sectionId: selectedSectionId,
         day: editorDay, period: editorPeriod,
-        subjectId: formSubjectId, subjectName: subject.name, teacher: formTeacher,
+        subjectId: formSubjectId, subjectName: subject.name,
+        teacher: teacher.user?.name ?? '',
+        teacherId: formTeacherId,
+        academicYearId: activeYear.id,
+        existingId: existing?.id,
       });
-      const fresh = await academicApi.getTimetable(selectedClassId, selectedSectionId);
-      setSlots(fresh);
+      const fresh = await academicApi.getTimetable(selectedSectionId);
+      setSlots(fresh.slots);
+      setHiddenSlotCount(fresh.hiddenSlotCount);
       showToast({ type: 'success', title: 'Slot updated' });
       setEditorOpen(false);
     } catch (err) {
@@ -143,8 +172,9 @@ export default function TimetablePage() {
     setSubmitting(true);
     try {
       await clearTimetableSlot(existing.id);
-      const fresh = await academicApi.getTimetable(selectedClassId, selectedSectionId);
-      setSlots(fresh);
+      const fresh = await academicApi.getTimetable(selectedSectionId);
+      setSlots(fresh.slots);
+      setHiddenSlotCount(fresh.hiddenSlotCount);
       showToast({ type: 'info', title: 'Slot cleared' });
       setEditorOpen(false);
     } catch (err) {
@@ -168,6 +198,32 @@ export default function TimetablePage() {
         <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">Configure weekly periods and subject assignment per class</p>
       </div>
 
+      {!activeYear && (
+        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
+          <div>
+            <p className="text-[0.8125rem] font-semibold text-amber-900">No active academic year</p>
+            <p className="text-[0.75rem] text-amber-700 mt-0.5">
+              Mark one year as current under Academic Setup → Years before editing the timetable.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hiddenSlotCount > 0 && (
+        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
+          <div>
+            <p className="text-[0.8125rem] font-semibold text-amber-900">
+              {hiddenSlotCount} slot{hiddenSlotCount === 1 ? '' : 's'} hidden
+            </p>
+            <p className="text-[0.75rem] text-amber-700 mt-0.5">
+              These slots exist on the server but don't match the standard period grid, so they can't be shown here. Contact support to reconcile them.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Class + Section selectors */}
       <div className="bg-[var(--card-bg)] rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
@@ -177,6 +233,7 @@ export default function TimetablePage() {
               options={classes.map((c) => ({ label: c.name, value: c.id }))}
               value={selectedClassId}
               onChange={(e) => handleClassChange(e.target.value)}
+              disabled={!activeYear}
             />
           </div>
           <div className="flex-1">
@@ -185,9 +242,10 @@ export default function TimetablePage() {
               options={(selectedClass?.sections || []).map((s) => ({ label: `Section ${s.name}`, value: s.id }))}
               value={selectedSectionId}
               onChange={(e) => setSelectedSectionId(e.target.value)}
+              disabled={!activeYear}
             />
           </div>
-          {selectedSection && (
+          {selectedSection && selectedSection.classTeacher.trim() && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[var(--card-bg-hover)]">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <Calendar className="w-4 h-4 text-emerald-600" strokeWidth={2} />
@@ -214,9 +272,12 @@ export default function TimetablePage() {
       ) : (
         <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
           <div className="overflow-x-auto">
-            <div className="min-w-[800px]">
+            <div className="min-w-[1100px]">
               {/* Header row: days */}
-              <div className="grid grid-cols-[100px_repeat(5,1fr)] gap-px bg-[var(--border-subtle)]">
+              <div
+                className="grid gap-px bg-[var(--border-subtle)]"
+                style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}
+              >
                 <div className="bg-[var(--card-bg-hover)] px-3 py-3">
                   <span className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.06em]">Period</span>
                 </div>
@@ -230,7 +291,11 @@ export default function TimetablePage() {
 
               {/* Period rows */}
               {periods.map((p) => (
-                <div key={p.period} className="grid grid-cols-[100px_repeat(5,1fr)] gap-px bg-[var(--border-subtle)]">
+                <div
+                  key={p.period}
+                  className="grid gap-px bg-[var(--border-subtle)]"
+                  style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}
+                >
                   {/* Period label */}
                   <div className="bg-[var(--card-bg)] px-3 py-3 flex flex-col justify-center">
                     <p className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">P{p.period}</p>
@@ -246,8 +311,11 @@ export default function TimetablePage() {
                       <button
                         key={`${d.id}-${p.period}`}
                         onClick={() => openEditor(d.id, p.period)}
+                        disabled={!activeYear}
+                        title={!activeYear ? 'Mark an academic year as current to edit slots' : undefined}
                         className={cn(
                           'bg-[var(--card-bg)] px-2 py-2 text-left transition-colors hover:bg-[var(--card-bg-hover)] min-h-[64px] group',
+                          !activeYear && 'cursor-not-allowed opacity-60 hover:bg-[var(--card-bg)]',
                         )}
                       >
                         {slot ? (
@@ -316,11 +384,15 @@ export default function TimetablePage() {
             onChange={(e) => setFormSubjectId(e.target.value)}
             placeholder={availableSubjects.length === 0 ? 'No subjects yet' : 'Select subject'}
           />
-          <Input
+          <Select
             label="Teacher *"
-            value={formTeacher}
-            onChange={(e) => setFormTeacher(e.target.value)}
-            placeholder="e.g. Mr. Amit Verma"
+            options={teachers.map((t) => ({
+              label: t.user?.name || t.employeeId,
+              value: t.id,
+            }))}
+            value={formTeacherId}
+            onChange={(e) => setFormTeacherId(e.target.value)}
+            placeholder={teachers.length === 0 ? 'No teachers yet' : 'Select teacher'}
           />
         </div>
       </Modal>

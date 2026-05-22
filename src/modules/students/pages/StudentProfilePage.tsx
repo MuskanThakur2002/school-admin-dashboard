@@ -11,7 +11,7 @@ import { useEnrollmentStore } from '@/stores/enrollment.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useUIStore } from '@/stores/ui.store';
-import { applicationsApi } from '@/services/modules/applications.api';
+import { studentsApi } from '@/services/modules/students.api';
 import { enrollmentsApi } from '@/services/modules/enrollments.api';
 import { attendanceApi } from '@/services/modules/attendance.api';
 import { isSuperAdmin } from '@/types/auth.types';
@@ -86,7 +86,7 @@ export default function StudentProfilePage() {
   }, [id, getStudent]);
 
   useEffect(() => {
-    if (!student?.applicationId) {
+    if (!student?.id) {
       setDocuments([]);
       return;
     }
@@ -96,12 +96,12 @@ export default function StudentProfilePage() {
 
     setDocsLoading(true);
     setDocsError(null);
-    applicationsApi
-      .listDocuments(schoolId, student.applicationId)
+    studentsApi
+      .listDocuments(schoolId, student.id)
       .then((docs) => setDocuments(docs))
       .catch((err) => setDocsError((err as Error).message))
       .finally(() => setDocsLoading(false));
-  }, [student?.applicationId]);
+  }, [student?.id]);
 
   // Need class names to label enrollments.
   useEffect(() => {
@@ -352,11 +352,7 @@ export default function StudentProfilePage() {
 
       <div className="mt-5">
         <SectionCard title="Documents" icon={FileText}>
-          {!student.applicationId ? (
-            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">
-              No application linked — documents are uploaded during admission.
-            </p>
-          ) : docsLoading ? (
+          {docsLoading ? (
             <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">Loading documents...</p>
           ) : docsError ? (
             <p className="text-[0.8125rem] text-red-600 py-2">{docsError}</p>

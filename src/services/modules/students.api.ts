@@ -8,6 +8,9 @@ import type {
   DemoStudent,
   ParentGuardian,
 } from '@/types/student.types';
+// The student-scoped documents endpoint returns the same Document shape used
+// by the application-scoped one. Reuse the type instead of defining a parallel.
+import type { ApplicationDocument } from '@/types/admissions.types';
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -64,6 +67,17 @@ export const studentsApi = {
   /** DELETE /schools/:schoolId/students/:id — requires DELETE_STUDENT */
   remove: async (schoolId: string, id: string): Promise<void> => {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/students/${id}`);
+  },
+
+  /** GET /schools/:schoolId/students/:id/documents */
+  listDocuments: async (
+    schoolId: string,
+    studentId: string,
+  ): Promise<ApplicationDocument[]> => {
+    const res = await api.get<ApiEnvelope<ApplicationDocument[]>>(
+      `/schools/${schoolId}/students/${studentId}/documents`,
+    );
+    return res.data;
   },
 };
 

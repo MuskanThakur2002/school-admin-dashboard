@@ -44,7 +44,7 @@ interface AcademicState {
   deleteSubject: (id: string) => Promise<void>;
 
   // ─── Timetable ─────────────────────────────────
-  getTimetable: (classId: string, sectionId: string) => Promise<TimetableSlot[]>;
+  getTimetable: (sectionId: string) => Promise<{ slots: TimetableSlot[]; hiddenSlotCount: number }>;
   setTimetableSlot: (dto: CreateTimetableSlotDto) => Promise<TimetableSlot>;
   clearTimetableSlot: (slotId: string) => Promise<void>;
 
@@ -173,7 +173,7 @@ export const useAcademicStore = create<AcademicState>((set) => ({
   },
 
   // ─── Timetable ─────────────────────────────────
-  getTimetable: (classId, sectionId) => academicApi.getTimetable(classId, sectionId),
+  getTimetable: (sectionId) => academicApi.getTimetable(sectionId),
   setTimetableSlot: (dto) => academicApi.setTimetableSlot(dto),
   clearTimetableSlot: (slotId) => academicApi.clearTimetableSlot(slotId),
 

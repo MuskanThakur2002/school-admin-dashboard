@@ -1,8 +1,8 @@
 /**
  * Academic Setup API Layer
- * Academic Years, Classes (class-masters), Sections (class-sections), and
- * Subjects use the real backend. Timetable, houses, and rollover are still
- * mocked.
+ * Academic Years, Classes (class-masters), Sections (class-sections),
+ * Subjects, and Timetable Slots use the real backend. Houses and rollover
+ * are still mocked.
  */
 import { api } from '@/services/api-client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -149,7 +149,9 @@ function mapClass(b: BackendClassMaster, sections: Section[] = []): ClassGroup {
 }
 
 // ─── Mock DBs ──────────────────────────────────────────────
-// Seed timetable for Class V Section A
+// Fixed period grid the UI renders against. Backend stores arbitrary
+// start/end times per slot, so on read we match `startTime` back to one
+// of these entries to derive a period number.
 const periodTimes = [
   { period: 1, start: '09:00', end: '09:45' },
   { period: 2, start: '09:45', end: '10:30' },
@@ -159,36 +161,32 @@ const periodTimes = [
   { period: 6, start: '13:45', end: '14:30' },
 ];
 
-const seedSlots = (classId: string, sectionId: string): TimetableSlot[] => {
-  const days: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-  const subjectsRotation = [
-    { id: 'sub3', name: 'Mathematics', teacher: 'Mr. Amit Verma' },
-    { id: 'sub1', name: 'English', teacher: 'Ms. Sunita Devi' },
-    { id: 'sub4', name: 'Science', teacher: 'Mr. Rajesh Patel' },
-    { id: 'sub2', name: 'Hindi', teacher: 'Ms. Pooja Mishra' },
-    { id: 'sub8', name: 'Social Studies', teacher: 'Ms. Kavita Reddy' },
-    { id: 'sub10', name: 'Physical Education', teacher: 'Mr. Suresh Singh' },
-  ];
+// ─── Timetable Slot backend wire format & mappers ─────────
+interface BackendTimetableSlot {
+  id: string;
+  schoolId: string;
+  classSectionId: string;
+  subjectId: string;
+  teacherId: string;
+  academicYearId: string;
+  dayOfWeek: number; // 0=Sun, 1=Mon, ..., 6=Sat
+  startTime: string; // "09:00" or "09:00:00"
+  endTime: string;
+  createdAt?: string;
+  updatedAt?: string;
+  subject?: { id: string; name: string; code: string };
+  teacher?: { id: string; user?: { id: string; name: string } };
+}
 
-  const slots: TimetableSlot[] = [];
-  days.forEach((day, dayIdx) => {
-    periodTimes.forEach((p, pIdx) => {
-      const sub = subjectsRotation[(dayIdx + pIdx) % subjectsRotation.length];
-      slots.push({
-        id: `slot-${classId}-${sectionId}-${day}-${p.period}`,
-        classId, sectionId, day, period: p.period,
-        subjectId: sub.id, subjectName: sub.name, teacher: sub.teacher,
-        startTime: p.start, endTime: p.end,
-      });
-    });
-  });
-  return slots;
+const dayByNum: Record<number, DayOfWeek> = {
+  0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+  4: 'thursday', 5: 'friday', 6: 'saturday',
+};
+const numByDay: Record<DayOfWeek, number> = {
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
-let timetableDb: TimetableSlot[] = [
-  ...seedSlots('c5', 's5a'),
-  ...seedSlots('c8', 's8a'),
-];
+const trimTime = (t: string): string => t.slice(0, 5); // "09:00:00" → "09:00"
 
 let housesDb: House[] = [
   { id: 'h1', name: 'Red House', color: '#DC2626', motto: 'Courage and strength', captainName: 'Aarav Patel', studentCount: 58 },
@@ -403,32 +401,117 @@ export const academicApi = {
   },
 
   // ─── Timetable ──────────────────────────────────────────
-  getTimetable: (classId: string, sectionId: string): Promise<TimetableSlot[]> => {
-    return delay(timetableDb.filter((s) => s.classId === classId && s.sectionId === sectionId));
-  },
-
-  setTimetableSlot: (dto: CreateTimetableSlotDto): Promise<TimetableSlot> => {
-    const period = periodTimes.find((p) => p.period === dto.period);
-    if (!period) return Promise.reject(new Error('Invalid period'));
-
-    // Replace any existing slot at this position
-    timetableDb = timetableDb.filter(
-      (s) => !(s.classId === dto.classId && s.sectionId === dto.sectionId && s.day === dto.day && s.period === dto.period),
+  /**
+   * GET /schools/:schoolId/timetable-slots — list endpoint has no
+   * section filter documented, so we pull a page and filter client-side.
+   * Period is derived by matching the slot's startTime back to the fixed
+   * `periodTimes` table; slots that don't line up cannot be placed in the
+   * grid, so we count them in `hiddenSlotCount` and the page renders a
+   * banner so admins know hidden data exists on the server.
+   */
+  getTimetable: async (
+    sectionId: string,
+  ): Promise<{ slots: TimetableSlot[]; hiddenSlotCount: number }> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<PaginatedEnvelope<BackendTimetableSlot>>(
+      `/schools/${schoolId}/timetable-slots?page=1&limit=500`,
     );
-
-    const slot: TimetableSlot = {
-      id: `slot-${dto.classId}-${dto.sectionId}-${dto.day}-${dto.period}`,
-      classId: dto.classId, sectionId: dto.sectionId, day: dto.day, period: dto.period,
-      subjectId: dto.subjectId, subjectName: dto.subjectName, teacher: dto.teacher,
-      startTime: period.start, endTime: period.end,
-    };
-    timetableDb = [...timetableDb, slot];
-    return delay(slot);
+    const slots: TimetableSlot[] = [];
+    let hiddenSlotCount = 0;
+    for (const b of res.data ?? []) {
+      if (b.classSectionId !== sectionId) continue;
+      const day = dayByNum[b.dayOfWeek];
+      const start = trimTime(b.startTime);
+      const periodEntry = periodTimes.find((p) => p.start === start);
+      if (!day || !periodEntry) {
+        hiddenSlotCount += 1;
+        continue;
+      }
+      slots.push({
+        id: b.id,
+        sectionId: b.classSectionId,
+        day,
+        period: periodEntry.period,
+        subjectId: b.subjectId,
+        subjectName: b.subject?.name ?? '',
+        teacherId: b.teacherId,
+        teacher: b.teacher?.user?.name ?? '',
+        startTime: start,
+        endTime: trimTime(b.endTime),
+      });
+    }
+    return { slots, hiddenSlotCount };
   },
 
-  clearTimetableSlot: (slotId: string): Promise<void> => {
-    timetableDb = timetableDb.filter((s) => s.id !== slotId);
-    return delay(undefined);
+  /**
+   * Upsert a slot. If `dto.existingId` is set, PUT it; otherwise pre-flight
+   * the tuple against the server (no unique constraint exists yet) and PUT
+   * the conflicting row if one is found, else POST. Backend stores time +
+   * dayOfWeek directly — `period` is a UI concept that we expand into
+   * startTime/endTime via the periodTimes table.
+   */
+  setTimetableSlot: async (dto: CreateTimetableSlotDto): Promise<TimetableSlot> => {
+    const schoolId = resolveSchoolId();
+    const period = periodTimes.find((p) => p.period === dto.period);
+    if (!period) throw new Error('Invalid period');
+
+    const body = {
+      classSectionId: dto.sectionId,
+      subjectId: dto.subjectId,
+      teacherId: dto.teacherId,
+      academicYearId: dto.academicYearId,
+      dayOfWeek: numByDay[dto.day],
+      startTime: period.start,
+      endTime: period.end,
+    };
+
+    let existingId = dto.existingId;
+    if (!existingId) {
+      // Pre-flight: another tab/user may have created a slot at this tuple
+      // since our last fetch. Without a server unique constraint, skipping
+      // this check produces silent duplicates.
+      const pre = await api.get<PaginatedEnvelope<BackendTimetableSlot>>(
+        `/schools/${schoolId}/timetable-slots?page=1&limit=500`,
+      );
+      const conflict = (pre.data ?? []).find(
+        (b) =>
+          b.classSectionId === dto.sectionId &&
+          b.academicYearId === dto.academicYearId &&
+          b.dayOfWeek === numByDay[dto.day] &&
+          trimTime(b.startTime) === period.start,
+      );
+      if (conflict) existingId = conflict.id;
+    }
+
+    const res = existingId
+      ? await api.put<ApiEnvelope<BackendTimetableSlot>>(
+          `/schools/${schoolId}/timetable-slots/${existingId}`,
+          body,
+        )
+      : await api.post<ApiEnvelope<BackendTimetableSlot>>(
+          `/schools/${schoolId}/timetable-slots`,
+          body,
+        );
+
+    const b = res.data;
+    return {
+      id: b.id,
+      sectionId: b.classSectionId,
+      day: dayByNum[b.dayOfWeek] ?? dto.day,
+      period: dto.period,
+      subjectId: b.subjectId,
+      subjectName: dto.subjectName,
+      teacherId: b.teacherId,
+      teacher: dto.teacher,
+      startTime: trimTime(b.startTime),
+      endTime: trimTime(b.endTime),
+    };
+  },
+
+  /** DELETE /schools/:schoolId/timetable-slots/:id */
+  clearTimetableSlot: async (slotId: string): Promise<void> => {
+    const schoolId = resolveSchoolId();
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/timetable-slots/${slotId}`);
   },
 
   getPeriods: () => periodTimes,
@@ -462,13 +545,16 @@ export const academicApi = {
   },
 
   // ─── Rollover ───────────────────────────────────────────
-  // Timetable counts are still mocked. Class, section & subject counts now
-  // come from the real backend.
+  // Rollover itself is still mocked; counts come from the real backend.
   getRolloverPreview: async (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
-    const [years, classes, subjects] = await Promise.all([
+    const schoolId = resolveSchoolId();
+    const [years, classes, subjects, slotsRes] = await Promise.all([
       academicApi.getYears(),
       academicApi.getClasses(),
       academicApi.getSubjects(),
+      api.get<PaginatedEnvelope<BackendTimetableSlot>>(
+        `/schools/${schoolId}/timetable-slots?page=1&limit=1`,
+      ),
     ]);
     const source = years.find((y) => y.id === sourceYearId);
     const target = years.find((y) => y.id === targetYearId);
@@ -481,22 +567,27 @@ export const academicApi = {
       classCount: classes.length,
       sectionCount,
       subjectCount: subjects.length,
-      timetableSlotCount: timetableDb.length,
+      timetableSlotCount: slotsRes.total ?? 0,
     });
   },
 
   executeRollover: async (req: RolloverRequest): Promise<RolloverResult> => {
-    const [classes, subjects] = await Promise.all([
+    const schoolId = resolveSchoolId();
+    const [classes, subjects, slotsRes] = await Promise.all([
       academicApi.getClasses(),
       academicApi.getSubjects(),
+      api.get<PaginatedEnvelope<BackendTimetableSlot>>(
+        `/schools/${schoolId}/timetable-slots?page=1&limit=1`,
+      ),
     ]);
     const sectionCount = classes.reduce((sum, c) => sum + c.sections.length, 0);
+    const slotCount = slotsRes.total ?? 0;
     // Mock: pretend we cloned everything requested
     return delay({
       classesCloned: req.copyClasses ? classes.length : 0,
       sectionsCloned: req.copySections ? sectionCount : 0,
       subjectsCloned: req.copySubjects ? subjects.length : 0,
-      timetableSlotsCloned: req.copyTimetable ? timetableDb.length : 0,
+      timetableSlotsCloned: req.copyTimetable ? slotCount : 0,
     });
   },
 };

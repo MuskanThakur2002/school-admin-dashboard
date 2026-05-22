@@ -96,29 +96,32 @@ export interface CreateSubjectDto {
 export type UpdateSubjectDto = Partial<CreateSubjectDto>;
 
 // ─── Timetable ─────────────────────────────────────────────
-export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
 export interface TimetableSlot {
   id: string;
-  classId: string;
   sectionId: string;
   day: DayOfWeek;
   period: number; // 1-8
   subjectId: string;
   subjectName: string; // denormalized for display
-  teacher: string;
+  teacherId: string;
+  teacher: string; // denormalized teacher name for display
   startTime: string; // "09:00"
   endTime: string;   // "09:45"
 }
 
 export interface CreateTimetableSlotDto {
-  classId: string;
   sectionId: string;
   day: DayOfWeek;
   period: number;
   subjectId: string;
   subjectName: string;
   teacher: string;
+  teacherId: string;
+  academicYearId: string;
+  /** If set, the backend slot is updated via PUT; otherwise a new slot is POSTed. */
+  existingId?: string;
 }
 
 // ─── House / Team Grouping ─────────────────────────────────

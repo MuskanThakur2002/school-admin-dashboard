@@ -17,6 +17,7 @@ import type {
   Notification,
   NotificationTemplate,
   UpdateNotificationDto,
+  UpdateNotificationTemplateDto,
 } from '@/types/notification.types';
 
 // ─── Triggers (mock-only — no backend) ─────────────────────
@@ -78,6 +79,7 @@ interface NotificationsState {
   // Templates actions
   fetchTemplates: (page?: number, limit?: number) => Promise<void>;
   createTemplate: (body: CreateNotificationTemplateDto) => Promise<NotificationTemplate>;
+  updateTemplate: (id: string, body: UpdateNotificationTemplateDto) => Promise<NotificationTemplate>;
   deleteTemplate: (id: string) => Promise<void>;
 
   // Notifications actions
@@ -144,6 +146,15 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const { templatesPage, templatesLimit } = get();
     await get().fetchTemplates(templatesPage, templatesLimit);
     return created;
+  },
+
+  updateTemplate: async (id, body) => {
+    const schoolId = resolveSchoolId();
+    const updated = await notificationTemplatesApi.update(schoolId, id, body);
+    set((s) => ({
+      templates: s.templates.map((t) => (t.id === id ? updated : t)),
+    }));
+    return updated;
   },
 
   deleteTemplate: async (id) => {
@@ -219,23 +230,19 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   sendBulk: async (templateId, recipientIds, channel) => {
     const schoolId = resolveSchoolId();
     const sentAt = new Date().toISOString();
-    const results = await Promise.allSettled(
-      recipientIds.map((recipientId) =>
-        notificationsApi.create(schoolId, {
-          templateId,
-          recipientId,
-          channel,
-          status: 'pending',
-          sentAt,
-        }),
-      ),
-    );
-    const successCount = results.filter((r) => r.status === 'fulfilled').length;
-    const failureCount = results.length - successCount;
-    const errors = results
-      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      .map((r) => r.reason);
-    return { successCount, failureCount, errors };
+    const items = recipientIds.map((recipientId) => ({
+      templateId,
+      recipientId,
+      channel,
+      status: 'pending' as const,
+      sentAt,
+    }));
+    try {
+      await notificationsApi.createBulk(schoolId, items);
+      return { successCount: recipientIds.length, failureCount: 0, errors: [] };
+    } catch (err) {
+      return { successCount: 0, failureCount: recipientIds.length, errors: [err] };
+    }
   },
 
   // ─── Triggers (mock) ────────────────────────────────────

@@ -20,6 +20,8 @@ export interface CreateNotificationTemplateDto {
   triggerEvent?: string;
 }
 
+export type UpdateNotificationTemplateDto = Partial<CreateNotificationTemplateDto>;
+
 export interface Notification {
   id: string;
   schoolId: string;
