@@ -101,6 +101,7 @@ interface LedgerState {
   getEntry: (id: string) => Promise<LedgerEntry>;
   createEntry: (dto: CreateLedgerEntryDto) => Promise<LedgerEntry>;
   updateEntry: (id: string, dto: UpdateLedgerEntryDto) => Promise<LedgerEntry>;
+  deleteEntry: (id: string) => Promise<void>;
 }
 
 export const useLedgerStore = create<LedgerState>((set, get) => ({
@@ -191,5 +192,14 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
     const updated = await ledgerApi.update(schoolId, id, dto);
     set((s) => ({ entries: s.entries.map((e) => (e.id === id ? updated : e)) }));
     return updated;
+  },
+
+  deleteEntry: async (id) => {
+    const schoolId = resolveSchoolId();
+    await ledgerApi.remove(schoolId, id);
+    set((s) => ({
+      entries: s.entries.filter((e) => e.id !== id),
+      total: Math.max(0, s.total - 1),
+    }));
   },
 }));

@@ -66,6 +66,8 @@ export default function NewAdmissionPage() {
     Math.random().toString(36).slice(2, 12),
   );
   const [newParentAnnualIncome, setNewParentAnnualIncome] = useState('');
+  const [newFatherName, setNewFatherName] = useState('');
+  const [newMotherName, setNewMotherName] = useState('');
   const [creatingParent, setCreatingParent] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -105,10 +107,18 @@ export default function NewAdmissionPage() {
       showToast({ type: 'error', title: 'Missing fields', message: 'Name and password are required.' });
       return;
     }
+    const incomeStr = newParentAnnualIncome.trim();
+    let incomeNum = 0;
+    if (incomeStr !== '') {
+      incomeNum = Number(incomeStr);
+      if (!Number.isFinite(incomeNum) || incomeNum < 0) {
+        showToast({ type: 'error', title: 'Invalid annual income', message: 'Annual income must be a non-negative number.' });
+        return;
+      }
+    }
     setCreatingParent(true);
     try {
       const parentRole = await ensureParentRole();
-      const incomeNum = Number(newParentAnnualIncome) || 0;
       const created = await createParent({
         user: {
           name: parentName.trim(),
@@ -118,7 +128,11 @@ export default function NewAdmissionPage() {
           roleId: parentRole.id,
           isActive: true,
         },
-        parent: { annualIncome: incomeNum },
+        parent: {
+          annualIncome: incomeNum,
+          fatherName: newFatherName.trim() || undefined,
+          motherName: newMotherName.trim() || undefined,
+        },
       });
       showToast({
         type: 'success',
@@ -130,6 +144,8 @@ export default function NewAdmissionPage() {
       setSelectedParentId(created.id);
       setNewParentPassword(Math.random().toString(36).slice(2, 12));
       setNewParentAnnualIncome('');
+      setNewFatherName('');
+      setNewMotherName('');
     } catch (err) {
       showToast({ type: 'error', title: 'Failed to create guardian', message: (err as Error).message });
     } finally {
@@ -412,11 +428,17 @@ export default function NewAdmissionPage() {
                     placeholder="Auto-suggested"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Father name" value={newFatherName} onChange={(e) => setNewFatherName(e.target.value)} placeholder="e.g. Rajesh Mehta" />
+                  <Input label="Mother name" value={newMotherName} onChange={(e) => setNewMotherName(e.target.value)} placeholder="e.g. Meera Mehta" />
+                </div>
                 <Input
-                  label="Annual income (₹)"
+                  label="Annual income (INR)"
+                  type="number"
+                  min={0}
                   value={newParentAnnualIncome}
                   onChange={(e) => setNewParentAnnualIncome(e.target.value)}
-                  placeholder="0"
+                  placeholder="100000"
                 />
                 <Button
                   onClick={handleCreateParent}

@@ -6,6 +6,7 @@
  *   POST   /schools/:schoolId/ledgers              — create entry
  *   GET    /schools/:schoolId/ledger/:id           — get one
  *   PUT    /schools/:schoolId/ledger/:id           — update
+ *   DELETE /schools/:schoolId/ledger/:id           — delete
  *
  * `runningBalance` is sent as 0 on writes — the backend recomputes the
  * real value from prior entries for the enrollment/year.
@@ -82,5 +83,10 @@ export const ledgerApi = {
       { schoolId, ...body },
     );
     return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/ledger/:id  (singular) */
+  remove: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/ledger/${id}`);
   },
 };

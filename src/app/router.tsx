@@ -163,6 +163,7 @@ export const router = createBrowserRouter([
                 path: 'settings',
                 children: [
                   { index: true, element: lazyPage(() => import('@/modules/settings/pages/SettingsPage')) },
+                  { path: 'users', element: lazyPage(() => import('@/modules/settings/pages/UsersPage')) },
                   { path: 'roles', element: lazyPage(() => import('@/modules/settings/pages/RolesPage')) },
                   { path: 'holidays', element: lazyPage(() => import('@/modules/settings/pages/HolidaysPage')) },
                   { path: 'payment-modes', element: lazyPage(() => import('@/modules/settings/pages/PaymentModesPage')) },

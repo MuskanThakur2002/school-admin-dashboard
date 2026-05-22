@@ -29,4 +29,8 @@ export interface CreatePaymentDto {
   paidAt: string;
 }
 
+// All fields optional — refund flow only sets `status` and `receiptNumber`,
+// but the backend accepts any subset of CreatePaymentDto.
+export type UpdatePaymentDto = Partial<CreatePaymentDto>;
+
 export type PaymentMode = 'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online';

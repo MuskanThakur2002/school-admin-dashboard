@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
-import { useParentStore } from '@/stores/parent.store';
 import { useEnrollmentStore } from '@/stores/enrollment.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useUIStore } from '@/stores/ui.store';
@@ -14,6 +13,7 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { Pagination } from '@/components/ui/Pagination/Pagination';
+import { ParentPicker } from '@/modules/students/components/ParentPicker';
 import type { CreateStudentDto, StudentGender } from '@/types/student.types';
 
 const genderOptions: { label: string; value: StudentGender }[] = [
@@ -294,8 +294,6 @@ interface AddStudentModalProps {
 
 function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
   const createStudent = useStudentsStore((s) => s.createStudent);
-  const parents = useParentStore((s) => s.parents);
-  const fetchParents = useParentStore((s) => s.fetchParents);
   const createEnrollment = useEnrollmentStore((s) => s.createEnrollment);
   const years = useAcademicStore((s) => s.years);
   const classes = useAcademicStore((s) => s.classes);
@@ -318,10 +316,9 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    if (parents.length === 0) fetchParents(1, 100);
     if (years.length === 0) fetchYears();
     if (classes.length === 0) fetchClasses();
-  }, [open, parents.length, years.length, classes.length, fetchParents, fetchYears, fetchClasses]);
+  }, [open, years.length, classes.length, fetchYears, fetchClasses]);
 
   const reset = () =>
     setForm({
@@ -395,11 +392,6 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     }
   };
 
-  const parentOptions = parents.map((p) => ({
-    label: p.user?.name ? `${p.user.name}${p.user.email ? ` — ${p.user.email}` : ''}` : p.id,
-    value: p.id,
-  }));
-
   const sectionOptions = useMemo(() => {
     const opts: { label: string; value: string }[] = [{ label: '— Skip enrollment for now —', value: '' }];
     for (const cls of classes) {
@@ -452,13 +444,6 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
             onChange={(e) => update('gender', e.target.value as StudentGender)}
             options={genderOptions}
           />
-          <Select
-            label="Guardian *"
-            value={form.parentId}
-            onChange={(e) => update('parentId', e.target.value)}
-            options={parentOptions}
-            placeholder={parents.length === 0 ? 'Loading guardians...' : 'Select a guardian'}
-          />
           <Input
             label="Status *"
             value={form.status}
@@ -466,6 +451,12 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
             placeholder="active"
           />
         </div>
+
+        <ParentPicker
+          value={form.parentId}
+          onChange={(p) => update('parentId', p?.id ?? '')}
+          required
+        />
 
         <div className="border-t border-[var(--border-subtle)] pt-4">
           <h3 className="text-[0.8125rem] font-bold text-[var(--text-primary)] mb-1">Enrollment <span className="font-medium text-[var(--text-muted)]">(optional)</span></h3>

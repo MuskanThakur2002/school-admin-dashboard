@@ -53,8 +53,19 @@ export default function ApprovalWorkflowPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Post-approve payment step state. When set, the approve modal pivots to a
-  // "Collect initial payment" form. `null` = approve not yet done.
+  // Approval modal is a 4-step flow now:
+  //   approve  → assign class + section, create student/enrollment
+  //   feePlan  → link the new enrollment to a fee structure (required for the
+  //              student to owe ongoing fees). Concession/scholarship optional.
+  //   payment  → collect joining payment (skippable — fee plan is already saved).
+  //   receipt  → confirmation. Closes the modal on Done.
+  // We separated feePlan from payment so an admin who Skips payment still leaves
+  // the student linked to a fee structure (previously skipping cancelled both).
+  type ApproveStep = 'approve' | 'feePlan' | 'payment' | 'receipt';
+  const [step, setStep] = useState<ApproveStep>('approve');
+
+  // Set after a successful approve. Carries the new enrollment id and academic
+  // year forward into the feePlan and payment steps.
   const [paymentContext, setPaymentContext] = useState<null | {
     enrollmentId: string;
     academicYearId: string;
@@ -72,11 +83,14 @@ export default function ApprovalWorkflowPage() {
   // Fee plan picker — required so the new enrollment gets linked to a fee structure
   // for ongoing fees, and so the modal can auto-fill the admission-fee amount.
   const feeStructures = useFeeStore((s) => s.structures);
+  const feeStructuresLoading = useFeeStore((s) => s.structuresLoading);
   const fetchFeeStructures = useFeeStore((s) => s.fetchStructures);
   const createFeeAssignment = useFeeStore((s) => s.createAssignment);
   const [selectedStructureId, setSelectedStructureId] = useState('');
   const [structureDetail, setStructureDetail] = useState<FeeStructure | null>(null);
   const [structureLoading, setStructureLoading] = useState(false);
+  const [concessionPercent, setConcessionPercent] = useState('0');
+  const [scholarshipAmount, setScholarshipAmount] = useState('0');
 
   useEffect(() => {
     fetchPendingApprovals(1, 100);
@@ -84,13 +98,13 @@ export default function ApprovalWorkflowPage() {
     if (parents.length === 0) fetchParents(1, 100);
   }, [fetchPendingApprovals, fetchClasses, fetchParents, classes.length, parents.length]);
 
-  // When we enter the payment step, make sure fee structures are loaded so the
-  // dropdown isn't empty. Only fires when paymentContext flips from null → set.
+  // Load fee structures as soon as approve succeeds (step transitions out of
+  // 'approve'), so the feePlan step's dropdown isn't empty.
   useEffect(() => {
-    if (paymentContext && feeStructures.length === 0) {
+    if (step !== 'approve' && feeStructures.length === 0) {
       fetchFeeStructures(1, 100);
     }
-  }, [paymentContext, feeStructures.length, fetchFeeStructures]);
+  }, [step, feeStructures.length, fetchFeeStructures]);
 
   // Structures filtered to the new student's academic year. The list endpoint
   // doesn't return nested items, so we lazy-load the picked structure's detail
@@ -204,7 +218,9 @@ export default function ApprovalWorkflowPage() {
         title: 'Application approved',
         message: `${updated.admissionNo} created — ${updated.studentName} → ${className}${sectionName ? ` · ${sectionName}` : ''}`,
       });
-      // Pivot the open modal into the payment step instead of closing it.
+      // Pivot the open modal into the fee-plan step instead of closing it.
+      // The student is approved + enrolled — next we link them to a fee
+      // structure before optionally collecting the joining payment.
       if (updated.createdEnrollmentId && updated.academicYearId) {
         setPaymentContext({
           enrollmentId: updated.createdEnrollmentId,
@@ -212,7 +228,16 @@ export default function ApprovalWorkflowPage() {
           admissionNumber: updated.admissionNo ?? '',
           studentName: updated.studentName,
         });
+        setStep('feePlan');
       } else {
+        // Approve succeeded but the backend didn't return the enrollment id
+        // we need to drive the fee-plan / payment steps. Tell the admin so
+        // they know to set fees up manually rather than thinking it's done.
+        showToast({
+          type: 'error',
+          title: 'Fee plan not assigned',
+          message: 'Approved, but enrollment id missing in response. Assign fees from Fee Engine → Assignments.',
+        });
         setApproveModalOpen(false);
         setSelectedAppId(null);
       }
@@ -226,6 +251,7 @@ export default function ApprovalWorkflowPage() {
   const closeApproveModal = () => {
     setApproveModalOpen(false);
     setSelectedAppId(null);
+    setStep('approve');
     setPaymentContext(null);
     setPayAmount('');
     setPayCategory('Admission Fee');
@@ -235,14 +261,49 @@ export default function ApprovalWorkflowPage() {
     setPayReceipt(null);
     setSelectedStructureId('');
     setStructureDetail(null);
+    setConcessionPercent('0');
+    setScholarshipAmount('0');
   };
 
-  const handleCollectPayment = async () => {
+  // Step 2 (feePlan): link the new enrollment to a fee structure. This is now
+  // independent of payment — even if admin Skips payment in step 3, the
+  // student still has a fee plan attached.
+  const concessionNum = Number(concessionPercent);
+  const scholarshipNum = Number(scholarshipAmount);
+  const concessionInvalid = Number.isNaN(concessionNum) || concessionNum < 0 || concessionNum > 100;
+  const scholarshipInvalid = Number.isNaN(scholarshipNum) || scholarshipNum < 0;
+
+  const handleAssignFeePlan = async () => {
     if (!paymentContext) return;
     if (!selectedStructureId) {
       showToast({ type: 'error', title: 'Pick a fee plan', message: 'Choose a fee structure to link this student to.' });
       return;
     }
+    if (concessionInvalid || scholarshipInvalid) {
+      showToast({ type: 'error', title: 'Invalid discount', message: 'Fix the concession or scholarship value.' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createFeeAssignment({
+        studentEnrollmentId: paymentContext.enrollmentId,
+        feeStructureId: selectedStructureId,
+        concessionPercent: concessionNum,
+        scholarshipAmount: scholarshipNum,
+      });
+      showToast({ type: 'success', title: 'Fee plan assigned', message: paymentContext.studentName });
+      setStep('payment');
+    } catch (err) {
+      showToast({ type: 'error', title: 'Could not assign fee plan', message: (err as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Step 3 (payment): collect the joining payment. Fee assignment already
+  // happened in step 2 — Skip here just closes the modal cleanly.
+  const handleCollectPayment = async () => {
+    if (!paymentContext) return;
     const amount = Number(payAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       showToast({ type: 'error', title: 'Invalid amount', message: 'Enter a positive amount.' });
@@ -254,17 +315,6 @@ export default function ApprovalWorkflowPage() {
     }
     setSubmitting(true);
     try {
-      // 1. Link the new enrollment to the chosen fee structure so future
-      //    installments/fees are owed against it. Concession and scholarship
-      //    default to 0 — admin can adjust later from /fees/assignments.
-      await createFeeAssignment({
-        studentEnrollmentId: paymentContext.enrollmentId,
-        feeStructureId: selectedStructureId,
-        concessionPercent: 0,
-        scholarshipAmount: 0,
-      });
-
-      // 2. Post the initial admission payment (Debit + Payment).
       const res = await collectInitialPayment({
         studentEnrollmentId: paymentContext.enrollmentId,
         academicYearId: paymentContext.academicYearId,
@@ -275,6 +325,7 @@ export default function ApprovalWorkflowPage() {
         remarks: payRemarks.trim() || undefined,
       });
       setPayReceipt(res);
+      setStep('receipt');
       showToast({
         type: 'success',
         title: 'Payment collected',
@@ -453,123 +504,180 @@ export default function ApprovalWorkflowPage() {
         </div>
       )}
 
-      {/* Approve Modal — pivots to Payment step once approve succeeds. */}
+      {/* Approve Modal — 4-step flow: approve → feePlan → payment → receipt. */}
       {selectedApp && (
         <Modal
           open={approveModalOpen}
           onOpenChange={(open) => { if (!open) closeApproveModal(); else setApproveModalOpen(true); }}
           title={
-            paymentContext
-              ? payReceipt
-                ? `Receipt: ${payReceipt.receiptNumber || '—'}`
-                : `Collect initial payment: ${paymentContext.studentName}`
-              : `Approve: ${selectedApp.studentName}`
+            step === 'approve' ? `Approve: ${selectedApp.studentName}`
+              : step === 'feePlan' ? `Assign fee plan: ${paymentContext?.studentName ?? selectedApp.studentName}`
+              : step === 'payment' ? `Collect initial payment: ${paymentContext?.studentName ?? selectedApp.studentName}`
+              : `Receipt: ${payReceipt?.receiptNumber || '—'}`
           }
           description={
-            paymentContext
-              ? payReceipt
-                ? 'Payment recorded successfully.'
-                : `Admission ${paymentContext.admissionNumber} created. Collect the joining payment or skip.`
-              : 'Assign class and section to generate the admission number'
+            step === 'approve' ? 'Assign class and section to generate the admission number'
+              : step === 'feePlan' ? `Admission ${paymentContext?.admissionNumber ?? ''} created. Link the student to a fee structure.`
+              : step === 'payment' ? 'Collect the joining payment, or skip — the fee plan is already saved.'
+              : 'Payment recorded successfully.'
           }
           size="md"
           footer={
-            paymentContext ? (
-              payReceipt ? (
-                <Button onClick={closeApproveModal}>Done</Button>
-              ) : (
-                <>
-                  <Button variant="tertiary" onClick={closeApproveModal} disabled={submitting}>Skip</Button>
-                  <Button onClick={handleCollectPayment} loading={submitting}>
-                    Collect &amp; Issue Receipt
-                  </Button>
-                </>
-              )
-            ) : (
+            step === 'approve' ? (
               <>
                 <Button variant="tertiary" onClick={closeApproveModal}>Cancel</Button>
                 <Button onClick={handleApprove} loading={submitting}>
                   <CheckCircle2 className="w-4 h-4" /> Confirm Approval
                 </Button>
               </>
+            ) : step === 'feePlan' ? (
+              <>
+                <Button variant="tertiary" onClick={closeApproveModal} disabled={submitting}>
+                  Skip without fee plan
+                </Button>
+                <Button onClick={handleAssignFeePlan} loading={submitting} disabled={submitting || !selectedStructureId || concessionInvalid || scholarshipInvalid}>
+                  Assign Fee Plan
+                </Button>
+              </>
+            ) : step === 'payment' ? (
+              <>
+                <Button variant="tertiary" onClick={closeApproveModal} disabled={submitting}>Skip</Button>
+                <Button onClick={handleCollectPayment} loading={submitting} disabled={submitting}>
+                  Collect &amp; Issue Receipt
+                </Button>
+              </>
+            ) : (
+              <Button onClick={closeApproveModal}>Done</Button>
             )
           }
         >
-          {paymentContext ? (
-            payReceipt ? (
-              <div className="space-y-4">
-                <div className="rounded-xl bg-emerald-50 p-5">
-                  <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Receipt</p>
-                  <p className="text-[1.125rem] font-bold text-emerald-900">{payReceipt.receiptNumber || '—'}</p>
-                  <p className="text-[0.75rem] text-emerald-700 mt-2">
-                    ₹{payReceipt.amount.toLocaleString('en-IN')} collected for {paymentContext.studentName}.
+          {step === 'feePlan' && paymentContext ? (
+            <div className="space-y-4">
+              <Select
+                label="Fee Plan *"
+                options={[
+                  {
+                    label: feeStructuresLoading
+                      ? 'Loading fee plans...'
+                      : eligibleStructures.length
+                        ? 'Select fee plan...'
+                        : 'No fee plans for this year',
+                    value: '',
+                  },
+                  ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
+                ]}
+                value={selectedStructureId}
+                onChange={(e) => setSelectedStructureId(e.target.value)}
+                disabled={feeStructuresLoading || eligibleStructures.length === 0}
+              />
+              {selectedStructureId && structureLoading && (
+                <p className="text-[0.6875rem] text-[var(--text-muted)]">Loading plan details...</p>
+              )}
+              {selectedStructureId && !structureLoading && structureDetail && (
+                <div className="rounded-lg bg-[var(--card-bg-hover)] p-3">
+                  <p className="text-[0.6875rem] font-semibold text-[var(--text-tertiary)] uppercase tracking-[0.06em] mb-1">Heads in this plan</p>
+                  <p className="text-[0.75rem] text-[var(--text-secondary)] leading-relaxed">
+                    {structureDetail.feeStructureItems.length === 0
+                      ? 'This structure has no line items yet.'
+                      : structureDetail.feeStructureItems
+                          .map((it) => `${it.feeHead?.name ?? '—'} (₹${Number(it.amount).toLocaleString('en-IN')})`)
+                          .join(' · ')}
                   </p>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <Select
-                  label="Fee Plan *"
-                  options={[
-                    { label: eligibleStructures.length ? 'Select fee plan...' : 'No fee plans for this year', value: '' },
-                    ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
-                  ]}
-                  value={selectedStructureId}
-                  onChange={(e) => setSelectedStructureId(e.target.value)}
-                  disabled={eligibleStructures.length === 0}
-                />
-                {selectedStructureId && structureLoading && (
-                  <p className="text-[0.6875rem] text-[var(--text-muted)]">Loading plan details...</p>
-                )}
-                {selectedStructureId && !structureLoading && structureDetail && !structureDetail.feeStructureItems.some((it) => /admission/i.test(it.feeHead?.name ?? '')) && (
-                  <div className="rounded-lg bg-amber-50 p-3">
-                    <p className="text-[0.6875rem] text-amber-800 leading-relaxed">
-                      This plan has no "Admission Fee" head — enter the amount manually.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4">
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <Input
-                    label="Amount (₹) *"
+                    label="Concession (%)"
                     type="number"
-                    value={payAmount}
-                    onChange={(e) => setPayAmount(e.target.value)}
-                    placeholder="e.g. 5000"
+                    value={concessionPercent}
+                    onChange={(e) => setConcessionPercent(e.target.value)}
+                    placeholder="0"
                   />
-                  <Input
-                    label="Category *"
-                    value={payCategory}
-                    onChange={(e) => setPayCategory(e.target.value)}
-                    placeholder="Admission Fee"
-                  />
+                  {concessionInvalid && (
+                    <p className="text-[0.6875rem] text-red-500 mt-1">Must be between 0 and 100.</p>
+                  )}
                 </div>
-                <Select
-                  label="Payment mode *"
-                  options={paymentModeOptions}
-                  value={payMode}
-                  onChange={(e) => setPayMode(e.target.value as typeof payMode)}
-                />
-                {payMode !== 'cash' && (
+                <div>
                   <Input
-                    label="Transaction reference"
-                    value={payTxnRef}
-                    onChange={(e) => setPayTxnRef(e.target.value)}
-                    placeholder="UPI ID / cheque no / etc."
+                    label="Scholarship (₹)"
+                    type="number"
+                    value={scholarshipAmount}
+                    onChange={(e) => setScholarshipAmount(e.target.value)}
+                    placeholder="0"
                   />
-                )}
-                <Input
-                  label="Remarks"
-                  value={payRemarks}
-                  onChange={(e) => setPayRemarks(e.target.value)}
-                  placeholder="Optional notes"
-                />
-                <div className="rounded-lg bg-blue-50 p-3">
-                  <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
-                    The selected plan will be linked to this student so future fees are owed against it.
-                  </p>
+                  {scholarshipInvalid && (
+                    <p className="text-[0.6875rem] text-red-500 mt-1">Must be 0 or greater.</p>
+                  )}
                 </div>
               </div>
-            )
+              <div className="rounded-lg bg-blue-50 p-3">
+                <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
+                  Future installments and fees will be owed against this structure. Concession and scholarship can also be adjusted later from Fee Assignments.
+                </p>
+              </div>
+            </div>
+          ) : step === 'payment' && paymentContext ? (
+            <div className="space-y-4">
+              {structureDetail && (
+                <div className="rounded-xl bg-emerald-50 p-4">
+                  <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Fee plan linked</p>
+                  <p className="text-[0.8125rem] font-semibold text-emerald-900">{structureDetail.name}</p>
+                </div>
+              )}
+              {structureDetail && !structureDetail.feeStructureItems.some((it) => /admission/i.test(it.feeHead?.name ?? '')) && (
+                <div className="rounded-lg bg-amber-50 p-3">
+                  <p className="text-[0.6875rem] text-amber-800 leading-relaxed">
+                    This plan has no "Admission Fee" head — enter the amount manually.
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Amount (₹) *"
+                  type="number"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder="e.g. 5000"
+                />
+                <Input
+                  label="Category *"
+                  value={payCategory}
+                  onChange={(e) => setPayCategory(e.target.value)}
+                  placeholder="Admission Fee"
+                />
+              </div>
+              <Select
+                label="Payment mode *"
+                options={paymentModeOptions}
+                value={payMode}
+                onChange={(e) => setPayMode(e.target.value as typeof payMode)}
+              />
+              {payMode !== 'cash' && (
+                <Input
+                  label="Transaction reference"
+                  value={payTxnRef}
+                  onChange={(e) => setPayTxnRef(e.target.value)}
+                  placeholder="UPI ID / cheque no / etc."
+                />
+              )}
+              <Input
+                label="Remarks"
+                value={payRemarks}
+                onChange={(e) => setPayRemarks(e.target.value)}
+                placeholder="Optional notes"
+              />
+            </div>
+          ) : step === 'receipt' && paymentContext && payReceipt ? (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-emerald-50 p-5">
+                <p className="text-[0.625rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-1">Receipt</p>
+                <p className="text-[1.125rem] font-bold text-emerald-900">{payReceipt.receiptNumber || '—'}</p>
+                <p className="text-[0.75rem] text-emerald-700 mt-2">
+                  ₹{payReceipt.amount.toLocaleString('en-IN')} collected for {paymentContext.studentName}.
+                </p>
+              </div>
+            </div>
           ) : (
           <div className="space-y-5">
             {/* Student info */}
@@ -694,6 +802,10 @@ export default function ApprovalWorkflowPage() {
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                   <span>Student profile and enrollment are created atomically by the backend</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>You'll then assign a fee plan and optionally collect the joining payment</span>
                 </li>
               </ul>
             </div>

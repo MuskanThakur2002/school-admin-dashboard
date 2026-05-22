@@ -2,15 +2,18 @@
  * Payment API Layer
  *
  * Endpoints:
- *   GET  /schools/:schoolId/payments?page&limit
- *   POST /schools/:schoolId/payments
+ *   GET    /schools/:schoolId/payments?page&limit
+ *   POST   /schools/:schoolId/payments
+ *   GET    /schools/:schoolId/payments/:id
+ *   PUT    /schools/:schoolId/payments/:id
+ *   DELETE /schools/:schoolId/payments/:id
  *
  * A payment must reference an existing Debit ledger entry via `ledgerEntryId`.
  * The backend creates the corresponding Credit ledger entry server-side, so
  * the frontend only posts to /payments — no separate ledger write needed.
  */
 import { api } from '@/services/api-client';
-import type { Payment, CreatePaymentDto } from '@/types/payment.types';
+import type { Payment, CreatePaymentDto, UpdatePaymentDto } from '@/types/payment.types';
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -56,5 +59,31 @@ export const paymentApi = {
       { schoolId, ...body },
     );
     return res.data;
+  },
+
+  /** GET /schools/:schoolId/payments/:id */
+  getById: async (schoolId: string, id: string): Promise<Payment> => {
+    const res = await api.get<ApiEnvelope<Payment>>(
+      `/schools/${schoolId}/payments/${id}`,
+    );
+    return res.data;
+  },
+
+  /** PUT /schools/:schoolId/payments/:id */
+  update: async (
+    schoolId: string,
+    id: string,
+    body: UpdatePaymentDto,
+  ): Promise<Payment> => {
+    const res = await api.put<ApiEnvelope<Payment>>(
+      `/schools/${schoolId}/payments/${id}`,
+      { schoolId, ...body },
+    );
+    return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/payments/:id */
+  remove: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/payments/${id}`);
   },
 };

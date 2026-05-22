@@ -10,6 +10,8 @@ export interface Parent {
   schoolId: string;
   userId: string;
   annualIncome: number;
+  fatherName?: string | null;
+  motherName?: string | null;
   createdAt: string;
   updatedAt: string;
   user?: ParentUser;
@@ -18,6 +20,8 @@ export interface Parent {
 export interface CreateParentDto {
   userId: string;
   annualIncome: number;
+  fatherName?: string;
+  motherName?: string;
 }
 
 export type UpdateParentDto = Partial<CreateParentDto>;

@@ -152,7 +152,7 @@ export default function MarksEntryPage() {
             className="inline-flex items-center gap-1.5 text-[0.75rem] text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-2"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to assessments
+            Back to exams
           </Link>
           <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">
             Marks Entry
@@ -174,8 +174,8 @@ export default function MarksEntryPage() {
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Select
-          label="Assessment"
-          options={[{ label: 'All assessments', value: '' }, ...assessmentOptions]}
+          label="Exam"
+          options={[{ label: 'All exams', value: '' }, ...assessmentOptions]}
           value={activeAssessmentId}
           onChange={(e) => setFilter('assessmentId', e.target.value)}
         />
@@ -189,14 +189,14 @@ export default function MarksEntryPage() {
 
       {!activeAssessmentId && (
         <p className="text-[0.75rem] text-[var(--text-muted)] mb-4">
-          Pick an assessment above to enable adding marks.
+          Pick an exam above to enable adding marks.
         </p>
       )}
 
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="grid grid-cols-[1.8fr_1.4fr_1fr_0.8fr_1fr_0.6fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Student', 'Subject', 'Assessment', 'Marks', 'Grade', ''].map((h) => (
+          {['Student', 'Subject', 'Exam', 'Marks', 'Grade', ''].map((h) => (
             <span
               key={h}
               className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]"
@@ -262,7 +262,7 @@ export default function MarksEntryPage() {
             <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">
               {activeAssessmentId || activeEnrollmentId
                 ? 'Try clearing filters or add a mark entry'
-                : 'Pick an assessment to view or add marks'}
+                : 'Pick an exam to view or add marks'}
             </p>
           </div>
         )}
@@ -285,7 +285,7 @@ export default function MarksEntryPage() {
         subjectOptions={subjectOptions}
         defaultEnrollmentId={activeEnrollmentId}
         onSubmit={async (form) => {
-          if (!activeAssessmentId) throw new Error('Pick an assessment first');
+          if (!activeAssessmentId) throw new Error('Pick an exam first');
           if (!user?.id) throw new Error('No active user');
           await createMark({
             studentEnrollmentId: form.studentEnrollmentId,
@@ -401,7 +401,7 @@ function MarkFormModal({
       onOpenChange={onOpenChange}
       title={mode === 'create' ? 'Add Mark' : 'Edit Mark'}
       description={
-        mode === 'create' ? 'Record a student mark for the selected assessment.' : 'Update mark details.'
+        mode === 'create' ? 'Record a student mark for the selected exam.' : 'Update mark details.'
       }
       size="lg"
       footer={

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { useStudentsStore } from '@/stores/students.store';
+import { ParentPicker } from '@/modules/students/components/ParentPicker';
 import type { Student, StudentGender, UpdateStudentDto } from '@/types/student.types';
 
 interface EditStudentModalProps {
@@ -19,6 +20,7 @@ interface FormState {
   dateOfBirth: string;
   gender: StudentGender;
   status: string;
+  parentId: string;
   enrollmentDate: string;
   transportRoute: string;
   medicalNotes: string;
@@ -30,6 +32,7 @@ interface FieldErrors {
   dateOfBirth?: string;
   gender?: string;
   status?: string;
+  parentId?: string;
 }
 
 const GENDER_OPTIONS = [
@@ -50,6 +53,7 @@ function buildInitialForm(s: Student): FormState {
     dateOfBirth: s.dateOfBirth ?? '',
     gender: s.gender,
     status: s.status ?? 'active',
+    parentId: s.parentId ?? '',
     enrollmentDate: s.enrollmentDate ?? '',
     transportRoute: s.transportRoute ?? '',
     medicalNotes: s.medicalNotes ?? '',
@@ -86,6 +90,7 @@ export function EditStudentModal({ open, onOpenChange, student, onUpdated }: Edi
     if (!form.dateOfBirth) next.dateOfBirth = 'Date of birth is required';
     if (!form.gender) next.gender = 'Gender is required';
     if (!form.status) next.status = 'Status is required';
+    if (!form.parentId) next.parentId = 'Guardian is required';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -100,6 +105,7 @@ export function EditStudentModal({ open, onOpenChange, student, onUpdated }: Edi
       dateOfBirth: form.dateOfBirth,
       gender: form.gender,
       status: form.status,
+      parentId: form.parentId,
       enrollmentDate: form.enrollmentDate || null,
       transportRoute: form.transportRoute.trim() || null,
       medicalNotes: form.medicalNotes.trim() || null,
@@ -173,6 +179,15 @@ export function EditStudentModal({ open, onOpenChange, student, onUpdated }: Edi
             onChange={(e) => update('transportRoute', e.target.value)}
           />
         </div>
+
+        <ParentPicker
+          value={form.parentId}
+          onChange={(p) => update('parentId', p?.id ?? '')}
+          required
+        />
+        {errors.parentId && (
+          <p className="text-[0.6875rem] text-red-500 font-medium">{errors.parentId}</p>
+        )}
 
         <div className="space-y-1.5">
           <label

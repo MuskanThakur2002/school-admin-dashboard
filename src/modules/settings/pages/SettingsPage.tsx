@@ -1,8 +1,9 @@
-import { Shield, Calendar, CreditCard, FileText, GraduationCap, MessageSquare } from 'lucide-react';
+import { Shield, Calendar, CreditCard, FileText, GraduationCap, MessageSquare, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 
 const modules = [
+  { title: 'Users', desc: 'Manage user accounts, roles, and access', icon: Users, path: '/settings/users', color: 'bg-indigo-50 text-indigo-600' },
   { title: 'Roles & Permissions', desc: 'Define user roles and access control policies', icon: Shield, path: '/settings/roles', color: 'bg-blue-50 text-blue-600' },
   { title: 'Holidays', desc: 'Manage school holidays and calendar events', icon: Calendar, path: '/settings/holidays', color: 'bg-emerald-50 text-emerald-600' },
   { title: 'Payment Modes', desc: 'Configure accepted payment methods', icon: CreditCard, path: '/settings/payment-modes', color: 'bg-amber-50 text-amber-600' },

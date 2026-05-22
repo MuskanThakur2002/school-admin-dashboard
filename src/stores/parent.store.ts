@@ -31,6 +31,7 @@ interface ParentState {
   error: string | null;
 
   fetchParents: (page?: number, limit?: number) => Promise<void>;
+  searchParents: (q: string) => Promise<Parent[]>;
   getParent: (id: string) => Promise<Parent>;
   createParent: (input: CreateParentFlowDto) => Promise<Parent>;
   updateParent: (id: string, input: UpdateParentFlowDto) => Promise<Parent>;
@@ -68,6 +69,11 @@ export const useParentStore = create<ParentState>((set) => ({
     }
   },
 
+  searchParents: async (q: string) => {
+    const schoolId = resolveSchoolId();
+    return parentsApi.search(schoolId, q);
+  },
+
   getParent: async (id: string) => {
     const schoolId = resolveSchoolId();
     const parent = await parentsApi.getById(schoolId, id);
@@ -91,6 +97,8 @@ export const useParentStore = create<ParentState>((set) => ({
     const created = await parentsApi.create(schoolId, {
       userId: createdUser.id,
       annualIncome: parent.annualIncome,
+      fatherName: parent.fatherName,
+      motherName: parent.motherName,
     });
     const withUser: Parent = {
       ...created,

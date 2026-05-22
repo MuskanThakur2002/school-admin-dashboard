@@ -10,6 +10,7 @@ import type {
   CreateFeeStructureItemDto, UpdateFeeStructureItemDto,
   CreateFeeInstallmentDto, UpdateFeeInstallmentDto,
   CreateFeeAssignmentDto, UpdateFeeAssignmentDto,
+  BulkClassAssignmentDto,
   CreateInstallmentPlanDto, CreateConcessionDto, CreateLateFeeRuleDto,
 } from '@/types/fee.types';
 
@@ -40,6 +41,10 @@ interface FeeState {
   concessions: Concession[];
   rules: LateFeeRule[];
   loading: boolean;
+  // Dedicated flag for fetchStructures so dropdowns can distinguish
+  // "still loading" from "loaded but empty" — the shared `loading` is
+  // ambiguous because heads/items/installments share it too.
+  structuresLoading: boolean;
   assignmentsLoading: boolean;
   error: string | null;
 
@@ -74,6 +79,7 @@ interface FeeState {
   createAssignment: (dto: CreateFeeAssignmentDto) => Promise<FeeAssignment>;
   updateAssignment: (id: string, dto: UpdateFeeAssignmentDto) => Promise<FeeAssignment>;
   deleteAssignment: (id: string) => Promise<void>;
+  bulkAssignByClass: (dto: BulkClassAssignmentDto) => Promise<number>;
 
   // ─── Plans (mock) ──────────────────────────────────
   fetchPlans: () => Promise<void>;
@@ -97,7 +103,7 @@ export const useFeeStore = create<FeeState>((set) => ({
   structures: [], structuresPage: 1, structuresLimit: 25, structuresTotal: 0,
   assignments: [], assignmentsPage: 1, assignmentsLimit: 25, assignmentsTotal: 0,
   plans: [], concessions: [], rules: [],
-  loading: false, assignmentsLoading: false, error: null,
+  loading: false, structuresLoading: false, assignmentsLoading: false, error: null,
 
   // ─── Heads ─────────────────────────────────────────
   fetchHeads: async (page = 1, limit = 25) => {
@@ -138,7 +144,7 @@ export const useFeeStore = create<FeeState>((set) => ({
 
   // ─── Structures ────────────────────────────────────
   fetchStructures: async (page = 1, limit = 25) => {
-    set({ loading: true, error: null });
+    set({ loading: true, structuresLoading: true, error: null });
     try {
       const schoolId = resolveSchoolId();
       const res = await feeApi.listStructures(schoolId, { page, limit });
@@ -148,9 +154,10 @@ export const useFeeStore = create<FeeState>((set) => ({
         structuresLimit: res.limit,
         structuresTotal: res.total,
         loading: false,
+        structuresLoading: false,
       });
     } catch (err) {
-      set({ error: (err as Error).message, loading: false });
+      set({ error: (err as Error).message, loading: false, structuresLoading: false });
     }
   },
 
@@ -330,6 +337,21 @@ export const useFeeStore = create<FeeState>((set) => ({
     const schoolId = resolveSchoolId();
     await feeApi.deleteAssignment(schoolId, id);
     set((s) => ({ assignments: s.assignments.filter((a) => a.id !== id) }));
+  },
+
+  bulkAssignByClass: async (dto) => {
+    const schoolId = resolveSchoolId();
+    const { created, assignments } = await feeApi.bulkAssignByClass(schoolId, dto);
+    if (assignments.length > 0) {
+      set((s) => {
+        const feeStructure = s.structures.find((st) => st.id === dto.feeStructureId);
+        const hydrated = assignments.map((a) =>
+          feeStructure ? { ...a, feeStructure } : a,
+        );
+        return { assignments: [...hydrated, ...s.assignments] };
+      });
+    }
+    return created;
   },
 
   // ─── Plans (mock) ──────────────────────────────────

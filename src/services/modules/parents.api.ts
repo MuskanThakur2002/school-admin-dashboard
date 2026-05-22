@@ -38,6 +38,15 @@ export const parentsApi = {
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
+  /** GET /schools/:schoolId/parents/search?q=... — requires READ_PARENT */
+  search: async (schoolId: string, q: string): Promise<Parent[]> => {
+    const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+    const res = await api.get<ApiEnvelope<Parent[]>>(
+      `/schools/${schoolId}/parents/search${qs}`,
+    );
+    return res.data;
+  },
+
   /** GET /schools/:schoolId/parents/:id — requires READ_PARENT */
   getById: async (schoolId: string, id: string): Promise<Parent> => {
     const res = await api.get<ApiEnvelope<Parent>>(`/schools/${schoolId}/parents/${id}`);

@@ -3,6 +3,7 @@ import type {
   AttendanceRecord,
   AttendanceListParams,
   AttendanceListResponse,
+  CreateAttendanceDto,
   UpdateAttendanceDto,
 } from '@/types/attendance.types';
 
@@ -43,6 +44,15 @@ export const attendanceApi = {
     return { data: res.data, total: res.total, page: res.page, limit: res.limit };
   },
 
+  /** POST /schools/:schoolId/attendance — requires MARK_ATTENDANCE */
+  create: async (schoolId: string, body: CreateAttendanceDto): Promise<AttendanceRecord> => {
+    const res = await api.post<ApiEnvelope<AttendanceRecord>>(
+      `/schools/${schoolId}/attendance`,
+      body,
+    );
+    return res.data;
+  },
+
   /** GET /schools/:schoolId/attendance/:id — requires READ_ATTENDANCE */
   getById: async (schoolId: string, id: string): Promise<AttendanceRecord> => {
     const res = await api.get<ApiEnvelope<AttendanceRecord>>(
@@ -62,5 +72,10 @@ export const attendanceApi = {
       body,
     );
     return res.data;
+  },
+
+  /** DELETE /schools/:schoolId/attendance/:id — requires MARK_ATTENDANCE */
+  remove: async (schoolId: string, id: string): Promise<void> => {
+    await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/attendance/${id}`);
   },
 };

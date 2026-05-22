@@ -4,6 +4,11 @@ export interface Assessment {
   name: string;
   type: string;
   academicYearId: string;
+  classMasterId?: string;
+  classSectionId?: string | null;
+  startDate?: string;
+  endDate?: string;
+  description?: string | null;
   // API returns maxMarks as a string on GET but accepts a number on POST/PUT.
   maxMarks: string | number;
   createdAt: string;
@@ -15,7 +20,12 @@ export interface CreateAssessmentDto {
   name: string;
   type: string;
   academicYearId: string;
+  classMasterId: string;
+  classSectionId: string;
+  startDate: string;
+  endDate: string;
   maxMarks: number;
+  description?: string;
 }
 
 export type UpdateAssessmentDto = Partial<CreateAssessmentDto>;

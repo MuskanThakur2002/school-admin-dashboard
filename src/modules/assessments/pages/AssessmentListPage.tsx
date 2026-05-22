@@ -11,12 +11,18 @@ import { useUIStore } from '@/stores/ui.store';
 import { useAssessmentStore } from '@/stores/assessment.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import type { Assessment } from '@/types/assessment.types';
+import type { ClassGroup } from '@/types/academic.types';
 
 interface FormState {
   name: string;
   type: string;
   academicYearId: string;
+  classMasterId: string;
+  classSectionId: string;
+  startDate: string;
+  endDate: string;
   maxMarks: string;
+  description: string;
 }
 
 function emptyForm(activeYearId: string): FormState {
@@ -24,7 +30,12 @@ function emptyForm(activeYearId: string): FormState {
     name: '',
     type: '',
     academicYearId: activeYearId,
+    classMasterId: '',
+    classSectionId: '',
+    startDate: '',
+    endDate: '',
     maxMarks: '100',
+    description: '',
   };
 }
 
@@ -41,6 +52,8 @@ export default function AssessmentListPage() {
 
   const years = useAcademicStore((s) => s.years);
   const fetchYears = useAcademicStore((s) => s.fetchYears);
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
 
   const showToast = useUIStore((s) => s.showToast);
 
@@ -51,6 +64,10 @@ export default function AssessmentListPage() {
   useEffect(() => {
     if (years.length === 0) fetchYears();
   }, [years.length, fetchYears]);
+
+  useEffect(() => {
+    if (classes.length === 0) fetchClasses();
+  }, [classes.length, fetchClasses]);
 
   useEffect(() => {
     fetchAssessments({ page: 1, limit: 25 });
@@ -78,13 +95,13 @@ export default function AssessmentListPage() {
 
   const handleDelete = async (e: React.MouseEvent, a: Assessment) => {
     e.stopPropagation();
-    if (!confirm(`Delete assessment "${a.name}"?`)) return;
+    if (!confirm(`Delete exam "${a.name}"?`)) return;
     try {
       await deleteAssessment(a.id);
-      showToast({ type: 'info', title: 'Assessment deleted', message: a.name });
+      showToast({ type: 'info', title: 'Exam deleted', message: a.name });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      showToast({ type: 'error', title: 'Failed to delete assessment', message });
+      showToast({ type: 'error', title: 'Failed to delete exam', message });
     }
   };
 
@@ -94,9 +111,9 @@ export default function AssessmentListPage() {
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">
-            Assessments
+            Exams
           </h1>
-          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} assessments</p>
+          <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} exams</p>
         </div>
         <div className="flex gap-2.5">
           <Link
@@ -111,7 +128,7 @@ export default function AssessmentListPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add Assessment
+            Add Exam
           </button>
         </div>
       </div>
@@ -156,7 +173,7 @@ export default function AssessmentListPage() {
 
         {loading && (
           <div className="py-16 text-center">
-            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading assessments...</p>
+            <p className="text-[0.875rem] text-[var(--text-muted)]">Loading exams...</p>
           </div>
         )}
 
@@ -193,14 +210,14 @@ export default function AssessmentListPage() {
                     setEditing(a);
                   }}
                   className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[#002c98] hover:bg-[var(--brand-tint)] transition-colors"
-                  aria-label="Edit assessment"
+                  aria-label="Edit exam"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => handleDelete(e, a)}
                   className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
-                  aria-label="Delete assessment"
+                  aria-label="Delete exam"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -211,9 +228,9 @@ export default function AssessmentListPage() {
         {!loading && filteredData.length === 0 && (
           <div className="py-16 text-center">
             <ClipboardList className="w-10 h-10 text-[#e2e8f0] mx-auto mb-3" />
-            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No assessments found</p>
+            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No exams found</p>
             <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">
-              {search ? 'Try clearing the search' : 'Add the first assessment to get started'}
+              {search ? 'Try clearing the search' : 'Add the first exam to get started'}
             </p>
           </div>
         )}
@@ -224,7 +241,7 @@ export default function AssessmentListPage() {
           total={total}
           onPageChange={(p) => fetchAssessments({ page: p, limit })}
           onLimitChange={(l) => fetchAssessments({ page: 1, limit: l })}
-          label="assessments"
+          label="exams"
         />
       </div>
 
@@ -234,18 +251,24 @@ export default function AssessmentListPage() {
         onOpenChange={setAddOpen}
         yearOptions={yearOptions}
         defaultYearId={activeYear?.id ?? ''}
+        classes={classes}
         onSubmit={async (form) => {
           if (!form.academicYearId) throw new Error('Academic year is required');
           await createAssessment({
             name: form.name,
             type: form.type,
             academicYearId: form.academicYearId,
+            classMasterId: form.classMasterId,
+            classSectionId: form.classSectionId,
+            startDate: form.startDate,
+            endDate: form.endDate,
             maxMarks: Number(form.maxMarks),
+            description: form.description.trim() || undefined,
           });
-          showToast({ type: 'success', title: 'Assessment added', message: form.name });
+          showToast({ type: 'success', title: 'Exam added', message: form.name });
         }}
         onError={(message) =>
-          showToast({ type: 'error', title: 'Failed to add assessment', message })
+          showToast({ type: 'error', title: 'Failed to add exam', message })
         }
       />
 
@@ -258,18 +281,24 @@ export default function AssessmentListPage() {
         }}
         yearOptions={yearOptions}
         defaultYearId={activeYear?.id ?? ''}
+        classes={classes}
         onSubmit={async (form) => {
           if (!editing) return;
           await updateAssessment(editing.id, {
             name: form.name,
             type: form.type,
             academicYearId: form.academicYearId,
+            classMasterId: form.classMasterId,
+            classSectionId: form.classSectionId,
+            startDate: form.startDate,
+            endDate: form.endDate,
             maxMarks: Number(form.maxMarks),
+            description: form.description.trim() || undefined,
           });
-          showToast({ type: 'success', title: 'Assessment updated', message: form.name });
+          showToast({ type: 'success', title: 'Exam updated', message: form.name });
         }}
         onError={(message) =>
-          showToast({ type: 'error', title: 'Failed to update assessment', message })
+          showToast({ type: 'error', title: 'Failed to update exam', message })
         }
       />
     </div>
@@ -285,6 +314,7 @@ interface AssessmentFormModalProps {
   onOpenChange: (open: boolean) => void;
   yearOptions: { label: string; value: string }[];
   defaultYearId: string;
+  classes: ClassGroup[];
   onSubmit: (form: FormState) => Promise<void>;
   onError: (message: string) => void;
 }
@@ -296,6 +326,7 @@ function AssessmentFormModal({
   onOpenChange,
   yearOptions,
   defaultYearId,
+  classes,
   onSubmit,
   onError,
 }: AssessmentFormModalProps) {
@@ -309,7 +340,12 @@ function AssessmentFormModal({
         name: initial.name,
         type: initial.type,
         academicYearId: initial.academicYearId,
+        classMasterId: initial.classMasterId ?? '',
+        classSectionId: initial.classSectionId ?? '',
+        startDate: initial.startDate ?? '',
+        endDate: initial.endDate ?? '',
         maxMarks: String(initial.maxMarks),
+        description: initial.description ?? '',
       });
     } else {
       setForm(emptyForm(defaultYearId));
@@ -319,10 +355,24 @@ function AssessmentFormModal({
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  const classOptions = useMemo(
+    () => classes.map((c) => ({ label: c.name, value: c.id })),
+    [classes],
+  );
+
+  const sectionOptions = useMemo(() => {
+    const selected = classes.find((c) => c.id === form.classMasterId);
+    return (selected?.sections ?? []).map((s) => ({ label: s.name, value: s.id }));
+  }, [classes, form.classMasterId]);
+
   const canSubmit =
     form.name.trim() &&
     form.type.trim() &&
     form.academicYearId &&
+    form.classMasterId &&
+    form.classSectionId &&
+    form.startDate &&
+    form.endDate &&
     form.maxMarks &&
     Number(form.maxMarks) > 0;
 
@@ -343,9 +393,9 @@ function AssessmentFormModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={mode === 'create' ? 'Add Assessment' : 'Edit Assessment'}
+      title={mode === 'create' ? 'Add Exam' : 'Edit Exam'}
       description={
-        mode === 'create' ? 'Create a new assessment for an academic year.' : 'Update assessment details.'
+        mode === 'create' ? 'Create a new exam for an academic year.' : 'Update exam details.'
       }
       size="lg"
       footer={
@@ -386,6 +436,52 @@ function AssessmentFormModal({
             options={yearOptions}
             value={form.academicYearId}
             onChange={(e) => update('academicYearId', e.target.value)}
+          />
+          <Select
+            label="Class *"
+            placeholder="Select class"
+            options={classOptions}
+            value={form.classMasterId}
+            onChange={(e) => {
+              update('classMasterId', e.target.value);
+              update('classSectionId', '');
+            }}
+          />
+          <Select
+            label="Section *"
+            placeholder={form.classMasterId ? 'Select section' : 'Pick a class first'}
+            options={sectionOptions}
+            value={form.classSectionId}
+            onChange={(e) => update('classSectionId', e.target.value)}
+            disabled={!form.classMasterId}
+          />
+          <Input
+            label="Start date *"
+            type="date"
+            value={form.startDate}
+            onChange={(e) => update('startDate', e.target.value)}
+          />
+          <Input
+            label="End date *"
+            type="date"
+            value={form.endDate}
+            onChange={(e) => update('endDate', e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="exam-description"
+            className="block text-[0.75rem] font-semibold text-[var(--text-secondary)] tracking-wide"
+          >
+            Description
+          </label>
+          <textarea
+            id="exam-description"
+            rows={3}
+            value={form.description}
+            onChange={(e) => update('description', e.target.value)}
+            placeholder="Optional notes about the exam..."
+            className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.15)] transition-all resize-y"
           />
         </div>
       </div>

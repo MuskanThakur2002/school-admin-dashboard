@@ -155,6 +155,8 @@ export default function ParentProfilePage() {
         </SectionCard>
         <SectionCard title="Guardian details" icon={Wallet}>
           <div className="grid grid-cols-2 gap-x-6">
+            <Field label="Father Name" value={parent.fatherName ?? ''} />
+            <Field label="Mother Name" value={parent.motherName ?? ''} />
             <Field label="Annual Income" value={formatIncome(parent.annualIncome)} />
             <Field label="Created" value={parent.createdAt?.split('T')[0] ?? ''} />
             <Field label="Updated" value={parent.updatedAt?.split('T')[0] ?? ''} />
@@ -186,7 +188,7 @@ interface EditParentModalProps {
   onSave: (input: {
     userId: string;
     user?: { name?: string; email?: string; phoneNumber?: string; whatsapp?: string; address?: string };
-    parent?: { annualIncome?: number };
+    parent?: { annualIncome?: number; fatherName?: string; motherName?: string };
   }) => Promise<void>;
   onError: (message: string) => void;
 }
@@ -198,7 +200,7 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
 
   const [form, setForm] = useState({
     name: '', email: '', phoneNumber: '', whatsapp: '', address: '',
-    annualIncome: '',
+    annualIncome: '', fatherName: '', motherName: '',
   });
   const [initial, setInitial] = useState(form);
   const [loadingUser, setLoadingUser] = useState(false);
@@ -216,19 +218,22 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
           whatsapp: u.whatsapp ?? '',
           address: u.address ?? '',
           annualIncome: String(parent.annualIncome ?? ''),
+          fatherName: parent.fatherName ?? '',
+          motherName: parent.motherName ?? '',
         };
         setForm(next);
         setInitial(next);
       })
       .catch((err) => onError((err as Error).message))
       .finally(() => setLoadingUser(false));
-  }, [open, schoolId, parent.userId, parent.annualIncome, onError]);
+  }, [open, schoolId, parent.userId, parent.annualIncome, parent.fatherName, parent.motherName, onError]);
 
   const update = <K extends keyof typeof form>(key: K, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const incomeNumber = Number(form.annualIncome);
-  const incomeValid = form.annualIncome.trim() !== '' && Number.isFinite(incomeNumber) && incomeNumber >= 0;
+  const incomeStr = form.annualIncome.trim();
+  const incomeNumber = Number(incomeStr);
+  const incomeValid = incomeStr === '' || (Number.isFinite(incomeNumber) && incomeNumber >= 0);
   const canSubmit = form.name.trim() && incomeValid && !loadingUser;
 
   const handleSubmit = async () => {
@@ -242,8 +247,10 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
       if (form.whatsapp.trim() !== initial.whatsapp) userPatch.whatsapp = form.whatsapp.trim();
       if (form.address.trim() !== initial.address) userPatch.address = form.address.trim();
 
-      const parentPatch: { annualIncome?: number } = {};
-      if (incomeNumber !== parent.annualIncome) parentPatch.annualIncome = incomeNumber;
+      const parentPatch: { annualIncome?: number; fatherName?: string; motherName?: string } = {};
+      if (incomeStr !== '' && incomeNumber !== parent.annualIncome) parentPatch.annualIncome = incomeNumber;
+      if (form.fatherName.trim() !== initial.fatherName) parentPatch.fatherName = form.fatherName.trim();
+      if (form.motherName.trim() !== initial.motherName) parentPatch.motherName = form.motherName.trim();
 
       await onSave({
         userId: parent.userId,
@@ -294,8 +301,10 @@ function EditParentModal({ open, onOpenChange, parent, onSave, onError }: EditPa
           <div>
             <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Guardian details</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Father name" value={form.fatherName} onChange={(e) => update('fatherName', e.target.value)} />
+              <Input label="Mother name" value={form.motherName} onChange={(e) => update('motherName', e.target.value)} />
               <Input
-                label="Annual income (INR) *"
+                label="Annual income (INR)"
                 type="number"
                 min={0}
                 value={form.annualIncome}

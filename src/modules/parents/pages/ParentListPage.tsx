@@ -240,12 +240,14 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
     address: '',
     whatsapp: '',
     annualIncome: '',
+    fatherName: '',
+    motherName: '',
   });
   const [saving, setSaving] = useState(false);
 
   const reset = () => setForm({
     name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
-    annualIncome: '',
+    annualIncome: '', fatherName: '', motherName: '',
   });
 
   const handleClose = (next: boolean) => {
@@ -256,8 +258,9 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
   const update = <K extends keyof typeof form>(key: K, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const incomeNumber = Number(form.annualIncome);
-  const incomeValid = form.annualIncome.trim() !== '' && Number.isFinite(incomeNumber) && incomeNumber >= 0;
+  const incomeStr = form.annualIncome.trim();
+  const incomeNumber = incomeStr === '' ? 0 : Number(incomeStr);
+  const incomeValid = incomeStr === '' || (Number.isFinite(incomeNumber) && incomeNumber >= 0);
 
   const canSubmit =
     form.name.trim() &&
@@ -280,6 +283,8 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
         },
         parent: {
           annualIncome: incomeNumber,
+          fatherName: form.fatherName.trim() || undefined,
+          motherName: form.motherName.trim() || undefined,
         },
       });
       onSuccess(form.name.trim());
@@ -325,8 +330,10 @@ function AddParentModal({ open, onOpenChange, onCreate, onSuccess, onError }: Ad
         <div>
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Guardian details</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input label="Father name" value={form.fatherName} onChange={(e) => update('fatherName', e.target.value)} placeholder="e.g., Rajesh Patel" />
+            <Input label="Mother name" value={form.motherName} onChange={(e) => update('motherName', e.target.value)} placeholder="e.g., Meera Patel" />
             <Input
-              label="Annual income (INR) *"
+              label="Annual income (INR)"
               type="number"
               min={0}
               value={form.annualIncome}

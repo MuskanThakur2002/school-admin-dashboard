@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Plus, Pencil, Trash2, Search, X, Users, ClipboardList, Percent, IndianRupee,
+  Plus, Pencil, Trash2, Search, X, Users, ClipboardList, Percent, IndianRupee, UsersRound,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useFeeStore } from '@/stores/fee.store';
 import { useEnrollmentStore } from '@/stores/enrollment.store';
+import { useAcademicStore } from '@/stores/academic.store';
 import { useUIStore } from '@/stores/ui.store';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -12,8 +13,9 @@ import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { Pagination } from '@/components/ui/Pagination/Pagination';
 import { FeeEngineNav } from '@/modules/fee-engine/components/FeeEngineNav';
-import type { FeeAssignment } from '@/types/fee.types';
+import type { FeeAssignment, FeeStructure } from '@/types/fee.types';
 import type { StudentEnrollment } from '@/types/student.types';
+import type { ClassGroup } from '@/types/academic.types';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
@@ -37,15 +39,20 @@ export default function AssignmentsPage() {
   const createAssignment = useFeeStore((s) => s.createAssignment);
   const updateAssignment = useFeeStore((s) => s.updateAssignment);
   const deleteAssignment = useFeeStore((s) => s.deleteAssignment);
+  const bulkAssignByClass = useFeeStore((s) => s.bulkAssignByClass);
 
   const enrollments = useEnrollmentStore((s) => s.enrollments);
   const fetchEnrollments = useEnrollmentStore((s) => s.fetchEnrollments);
+
+  const classes = useAcademicStore((s) => s.classes);
+  const fetchClasses = useAcademicStore((s) => s.fetchClasses);
 
   const showToast = useUIStore((s) => s.showToast);
 
   const [search, setSearch] = useState('');
   const [filterEnrollmentId, setFilterEnrollmentId] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editing, setEditing] = useState<FeeAssignment | null>(null);
 
   useEffect(() => {
@@ -53,7 +60,8 @@ export default function AssignmentsPage() {
     // Bulk-load structures (used to display structure name on assignment rows).
     fetchStructures(1, 100);
     if (enrollments.length === 0) fetchEnrollments();
-  }, [fetchAssignments, fetchStructures, fetchEnrollments, enrollments.length]);
+    if (classes.length === 0) fetchClasses();
+  }, [fetchAssignments, fetchStructures, fetchEnrollments, fetchClasses, enrollments.length, classes.length]);
 
   const handlePageChange = (newPage: number) =>
     fetchAssignments(newPage, assignmentsLimit, {
@@ -130,12 +138,24 @@ export default function AssignmentsPage() {
           <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Fee Assignments</h1>
           <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">Link students to fee structures with per-student concessions and scholarships</p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
-        >
-          <Plus className="w-4 h-4" /> Assign Fees
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              // Refresh classes so newly-created sections show up in the picker.
+              fetchClasses();
+              setBulkOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-white text-[#002c98] text-[0.8125rem] font-semibold border border-[#002c98]/20 hover:bg-[#002c98]/5 transition-all"
+          >
+            <UsersRound className="w-4 h-4" /> Bulk Assign by Class
+          </button>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Assign Fees
+          </button>
+        </div>
       </div>
 
       {/* Metric strip */}
@@ -323,6 +343,25 @@ export default function AssignmentsPage() {
           setEditing(null);
         }}
       />
+
+      {/* Bulk-class modal */}
+      <BulkClassAssignModal
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        classes={classes}
+        structures={structures}
+        onSubmit={async ({ classSectionId, academicYearId, feeStructureId }) => {
+          const created = await bulkAssignByClass({ classSectionId, academicYearId, feeStructureId });
+          showToast({
+            type: 'success',
+            title: 'Bulk assignment complete',
+            message: `${created} student${created === 1 ? '' : 's'} linked to fee structure.`,
+          });
+          // Jump to page 1 — new rows are prepended server-side, so the user
+          // wouldn't see them if they were on page 2+ when bulk-assigning.
+          fetchAssignments(1, assignmentsLimit);
+        }}
+      />
     </div>
   );
 }
@@ -421,7 +460,7 @@ function AssignmentFormModal({
       footer={
         <>
           <Button variant="tertiary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSubmit} loading={saving} disabled={!canSubmit}>
+          <Button onClick={handleSubmit} loading={saving} disabled={saving || !canSubmit}>
             {initial ? 'Save Changes' : 'Assign Fees'}
           </Button>
         </>
@@ -476,6 +515,164 @@ function AssignmentFormModal({
             No fee structures available. Create a structure in the Fee Engine first.
           </p>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Bulk-class assignment modal ──────────────────────────────
+
+interface SectionOption {
+  classSectionId: string;
+  academicYearId: string;
+  label: string;
+}
+
+interface BulkClassAssignModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  classes: ClassGroup[];
+  structures: FeeStructure[];
+  onSubmit: (dto: {
+    classSectionId: string;
+    academicYearId: string;
+    feeStructureId: string;
+  }) => Promise<void>;
+}
+
+function BulkClassAssignModal({
+  open, onOpenChange, classes, structures, onSubmit,
+}: BulkClassAssignModalProps) {
+  const [sectionKey, setSectionKey] = useState('');
+  const [feeStructureId, setFeeStructureId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const showToast = useUIStore((s) => s.showToast);
+  const structuresLoading = useFeeStore((s) => s.structuresLoading);
+
+  // Flatten classes → sections. Skip sections missing an academicYearId, since
+  // the backend requires it on the bulk-class payload.
+  const sectionOptions: SectionOption[] = useMemo(() => {
+    const out: SectionOption[] = [];
+    for (const cls of classes) {
+      for (const sec of cls.sections) {
+        if (!sec.academicYearId) continue;
+        out.push({
+          classSectionId: sec.id,
+          academicYearId: sec.academicYearId,
+          label: `${cls.name} · Section ${sec.name}`,
+        });
+      }
+    }
+    return out;
+  }, [classes]);
+
+  const selectedSection = sectionOptions.find((s) => s.classSectionId === sectionKey) ?? null;
+
+  // Only fee structures matching the picked section's academic year are eligible.
+  const eligibleStructures = useMemo(() => {
+    if (!selectedSection) return [];
+    return structures.filter((s) => s.academicYearId === selectedSection.academicYearId);
+  }, [structures, selectedSection]);
+
+  useEffect(() => {
+    if (open) {
+      setSectionKey('');
+      setFeeStructureId('');
+    }
+  }, [open]);
+
+  // Clear the structure pick if the chosen one isn't valid for the new section's year.
+  useEffect(() => {
+    if (feeStructureId && !eligibleStructures.some((s) => s.id === feeStructureId)) {
+      setFeeStructureId('');
+    }
+  }, [eligibleStructures, feeStructureId]);
+
+  const sectionDropdownOptions = [
+    { label: sectionOptions.length ? 'Select a class section...' : 'No class sections found', value: '' },
+    ...sectionOptions.map((s) => ({ label: s.label, value: s.classSectionId })),
+  ];
+
+  const structureDropdownOptions = [
+    {
+      label: !selectedSection
+        ? 'Pick a class section first'
+        : structuresLoading
+          ? 'Loading fee structures...'
+          : eligibleStructures.length
+            ? 'Select a fee structure...'
+            : 'No structures for this academic year',
+      value: '',
+    },
+    ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
+  ];
+
+  const canSubmit = !!selectedSection && !!feeStructureId;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !selectedSection || saving) return;
+    setSaving(true);
+    try {
+      await onSubmit({
+        classSectionId: selectedSection.classSectionId,
+        academicYearId: selectedSection.academicYearId,
+        feeStructureId,
+      });
+      onOpenChange(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not assign fees.';
+      showToast({ type: 'error', title: 'Bulk assign failed', message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Bulk Assign Fees by Class"
+      description="Assigns one fee structure to every enrollment in the chosen class section. Concession and scholarship default to 0 — adjust per-student afterwards if needed."
+      size="lg"
+      footer={
+        <>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSubmit} loading={saving} disabled={saving || !canSubmit}>
+            Assign to Class
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Select
+          label="Class Section *"
+          options={sectionDropdownOptions}
+          value={sectionKey}
+          onChange={(e) => setSectionKey(e.target.value)}
+          disabled={sectionOptions.length === 0}
+        />
+        <Select
+          label="Fee Structure *"
+          options={structureDropdownOptions}
+          value={feeStructureId}
+          onChange={(e) => setFeeStructureId(e.target.value)}
+          disabled={!selectedSection || structuresLoading || eligibleStructures.length === 0}
+        />
+        {sectionOptions.length === 0 && (
+          <p className="text-[0.6875rem] text-amber-600">
+            No class sections found. Create sections in Academic Setup first.
+          </p>
+        )}
+        {selectedSection && eligibleStructures.length === 0 && (
+          <p className="text-[0.6875rem] text-amber-600">
+            No fee structures exist for this section's academic year. Create one in Fee Structures.
+          </p>
+        )}
+        <div className="rounded-lg bg-blue-50 p-3">
+          <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
+            Every student currently enrolled in this section will be linked to the chosen structure. Students enrolled later are not linked automatically.
+          </p>
+        </div>
       </div>
     </Modal>
   );
