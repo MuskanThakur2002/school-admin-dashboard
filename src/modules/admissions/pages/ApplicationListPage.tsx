@@ -97,7 +97,7 @@ export default function ApplicationListPage() {
   const [payMode, setPayMode] = useState<'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online'>('cash');
   const [payTxnRef, setPayTxnRef] = useState('');
   const [payRemarks, setPayRemarks] = useState('');
-  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string; amount: number } | null>(null);
+  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string | null; amount: number } | null>(null);
   const collectInitialPayment = useAdmissionsStore((s) => s.collectInitialPayment);
 
   // Fee plan selection (lazy-fetches structure detail to auto-fill admission-fee amount).

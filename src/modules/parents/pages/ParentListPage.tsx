@@ -38,7 +38,7 @@ export default function ParentListPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchParents(1, 1);
+    fetchParents(1, 10);
   }, [fetchParents]);
 
   const filteredData = useMemo(() => {
@@ -205,7 +205,7 @@ export default function ParentListPage() {
           total={total}
           onPageChange={(p) => fetchParents(p, limit)}
           onLimitChange={(l) => fetchParents(1, l)}
-          pageSizeOptions={[1, 10, 25, 50, 100]}
+          pageSizeOptions={[10, 25, 50, 100]}
           label="guardians"
         />
       </div>

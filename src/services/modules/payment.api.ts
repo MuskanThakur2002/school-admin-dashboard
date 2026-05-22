@@ -54,9 +54,14 @@ export const paymentApi = {
 
   /** POST /schools/:schoolId/payments */
   create: async (schoolId: string, body: CreatePaymentDto): Promise<Payment> => {
+    // Backend Joi rejects empty strings for transactionRef / receiptNumber —
+    // strip them so callers can pass through form state without guarding.
+    const clean: Record<string, unknown> = { schoolId, ...body };
+    if (clean.transactionRef === '' || clean.transactionRef == null) delete clean.transactionRef;
+    if (clean.receiptNumber === '' || clean.receiptNumber == null) delete clean.receiptNumber;
     const res = await api.post<ApiEnvelope<Payment>>(
       `/schools/${schoolId}/payments`,
-      { schoolId, ...body },
+      clean,
     );
     return res.data;
   },

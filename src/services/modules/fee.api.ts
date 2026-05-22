@@ -154,18 +154,34 @@ export const feeApi = {
   },
 
   // ─── Fee Structures (real backend) ──────────────────────
+  // Backend sometimes omits feeStructureItems/feeInstallments on the structure
+  // payload even though the type says they're required arrays. Normalizing
+  // here keeps every consumer's .map/.find/.length safe.
   /** GET /schools/:schoolId/fee-structures */
   listStructures: async (schoolId: string, params?: PaginationParams) => {
     const res = await api.get<PaginatedEnvelope<FeeStructure>>(
       `/schools/${schoolId}/fee-structures${buildQuery(params)}`,
     );
-    return { data: res.data, total: res.total, page: res.page, limit: res.limit };
+    return {
+      data: res.data.map((s) => ({
+        ...s,
+        feeStructureItems: s.feeStructureItems ?? [],
+        feeInstallments: s.feeInstallments ?? [],
+      })),
+      total: res.total,
+      page: res.page,
+      limit: res.limit,
+    };
   },
 
   /** GET /schools/:schoolId/fee-structures/:id */
   getStructure: async (schoolId: string, id: string): Promise<FeeStructure> => {
     const res = await api.get<ApiEnvelope<FeeStructure>>(`/schools/${schoolId}/fee-structures/${id}`);
-    return res.data;
+    return {
+      ...res.data,
+      feeStructureItems: res.data.feeStructureItems ?? [],
+      feeInstallments: res.data.feeInstallments ?? [],
+    };
   },
 
   /** POST /schools/:schoolId/fee-structures */
@@ -340,7 +356,10 @@ export const feeApi = {
 
   /**
    * POST /schools/:schoolId/fee-assignments/bulk-class
-   * Assigns one fee structure to every enrollment in a class section.
+   * Assigns one fee structure to every enrollment in either a single class
+   * section or every section of a class master for the given academic year.
+   * Caller must populate exactly one of `classSectionId` / `classMasterId`
+   * (enforced by the discriminated `BulkClassAssignmentDto`).
    * Response shape varies — backend may return an array of assignments or
    * { created, assignments }. Normalize both into BulkClassAssignmentResult.
    */

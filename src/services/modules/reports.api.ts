@@ -30,13 +30,16 @@ function resolveSchoolId(): string | null {
 // per-enrollment totals so the 4 ledger-backed reports below can group/
 // filter the result set without each one re-implementing the math.
 
-function deriveStatus(balance: number, lastPaymentDate: string): LedgerStatus {
+function deriveStatus(balance: number, totalPaid: number, oldestDebitDate: string): LedgerStatus {
   if (balance < 0) return 'overpaid';
   if (balance === 0) return 'clear';
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  return !lastPaymentDate || lastPaymentDate < cutoffStr ? 'overdue' : 'partial';
+  if (oldestDebitDate) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    if (oldestDebitDate < cutoffStr) return 'overdue';
+  }
+  return totalPaid === 0 ? 'unpaid' : 'partial';
 }
 
 async function fetchSummaries(): Promise<StudentLedgerSummary[]> {
@@ -82,6 +85,15 @@ async function fetchSummaries(): Promise<StudentLedgerSummary[]> {
       .filter((x) => x.entryType === 'Credit')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const lastPaymentDate = credits[0]?.createdAt.slice(0, 10) ?? '';
+
+    const sortedDesc = [...group].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const lastActivityDate = sortedDesc[0]?.createdAt.slice(0, 10) ?? '';
+
+    const debits = group
+      .filter((x) => x.entryType === 'Debit')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const oldestDebitDate = debits[0]?.createdAt.slice(0, 10) ?? '';
+
     const classMasterId = enrollment?.classSection?.classMasterId;
 
     summaries.push({
@@ -95,7 +107,8 @@ async function fetchSummaries(): Promise<StudentLedgerSummary[]> {
       totalPaid,
       balance,
       lastPaymentDate,
-      status: deriveStatus(balance, lastPaymentDate),
+      lastActivityDate,
+      status: deriveStatus(balance, totalPaid, oldestDebitDate),
       overpaymentAmount: balance < 0 ? Math.abs(balance) : 0,
     });
   }

@@ -9,9 +9,9 @@ export interface Payment {
   ledgerEntryId: string;
   amount: string;
   paymentMode: string;
-  transactionRef: string;
+  transactionRef: string | null;
   status: string;
-  receiptNumber: string;
+  receiptNumber: string | null;
   paidAt: string;
   createdAt: string;
   updatedAt: string;
@@ -22,9 +22,11 @@ export interface CreatePaymentDto {
   ledgerEntryId: string;
   amount: number;
   paymentMode: string;
-  transactionRef: string;
+  // Backend Joi rejects empty strings on these — omit when blank.
+  // receiptNumber is also auto-generated server-side when omitted.
+  transactionRef?: string;
   status: string;
-  receiptNumber: string;
+  receiptNumber?: string;
   // ISO datetime, e.g. new Date().toISOString()
   paidAt: string;
 }

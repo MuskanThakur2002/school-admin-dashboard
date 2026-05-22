@@ -112,7 +112,7 @@ interface AdmissionsState {
    * that ledger entry's id. Returns the created Payment so the UI can show the
    * receipt number.
    */
-  collectInitialPayment: (input: CollectInitialPaymentInput) => Promise<{ receiptNumber: string; amount: number }>;
+  collectInitialPayment: (input: CollectInitialPaymentInput) => Promise<{ receiptNumber: string | null; amount: number }>;
 
   // ─── Documents ────────────────────────────────
   fetchApplicationDocuments: (appId: string) => Promise<void>;
@@ -443,14 +443,14 @@ export const useAdmissionsStore = create<AdmissionsState>((set, get) => ({
 
     // 2. Create the Payment referencing the Debit entry. The backend creates the
     //    corresponding Credit entry server-side, so we don't write a second ledger row.
+    // receiptNumber is intentionally omitted — backend generates it.
     const payment = await paymentApi.create(schoolId, {
       studentEnrollmentId: input.studentEnrollmentId,
       ledgerEntryId: debit.id,
       amount: input.amount,
       paymentMode: input.paymentMode,
-      transactionRef: input.transactionRef ?? '',
+      ...(input.transactionRef ? { transactionRef: input.transactionRef } : {}),
       status: 'Success',
-      receiptNumber: '', // backend generates
       paidAt: new Date().toISOString(),
     });
 

@@ -5,7 +5,6 @@ import { cn } from '@/utils/cn';
 const tabs = [
   { label: 'Structures', path: '/fees' },
   { label: 'Fee Heads', path: '/fees/heads' },
-  { label: 'Assignments', path: '/fees/assignments' },
 ];
 
 interface FeeEngineNavProps {

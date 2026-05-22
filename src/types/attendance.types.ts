@@ -32,7 +32,7 @@ export interface UpdateAttendanceDto {
   studentEnrollmentId: string;
   date: string;
   status: AttendanceStatus;
-  remarks: string | null;
+  remarks?: string;
   markedById: string;
 }
 
@@ -40,7 +40,7 @@ export interface CreateAttendanceDto {
   studentEnrollmentId: string;
   date: string;
   status: AttendanceStatus;
-  remarks: string | null;
+  remarks?: string;
   markedById: string;
 }
 

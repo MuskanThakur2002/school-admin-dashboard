@@ -8,6 +8,7 @@ const fmt = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', c
 
 const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
   clear: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+  unpaid: { dot: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-100' },
   partial: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
   overdue: { dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' },
   overpaid: { dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
@@ -93,7 +94,7 @@ export default function LedgerListPage() {
           ))}
         </div>
         <div className="flex gap-1.5 ml-auto">
-          {['', 'clear', 'partial', 'overdue', 'overpaid'].map((s) => (
+          {['', 'clear', 'unpaid', 'partial', 'overdue', 'overpaid'].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)} className={cn('px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold transition-all', statusFilter === s ? 'bg-[#0f172a] text-white shadow-sm' : 'text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)]')}>
               {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
@@ -104,7 +105,7 @@ export default function LedgerListPage() {
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="grid grid-cols-[1.2fr_2fr_1.2fr_1.2fr_1.2fr_1fr_1fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Adm. No.', 'Student', 'Total Due', 'Paid', 'Balance', 'Last Payment', 'Status'].map((h) => (
+          {['Adm. No.', 'Student', 'Total Due', 'Paid', 'Balance', 'Last Activity', 'Status'].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
@@ -122,7 +123,7 @@ export default function LedgerListPage() {
               <span className="font-display text-[0.8125rem] font-bold text-[var(--text-secondary)]">{fmt(l.totalDue)}</span>
               <span className="font-display text-[0.8125rem] font-bold text-emerald-600">{fmt(l.totalPaid)}</span>
               <span className={cn('font-display text-[0.8125rem] font-bold', l.balance > 0 ? 'text-red-500' : l.balance < 0 ? 'text-blue-600' : 'text-emerald-600')}>{l.balance < 0 ? `(${fmt(Math.abs(l.balance))})` : fmt(l.balance)}</span>
-              <span className="text-[0.75rem] text-[var(--text-muted)]">{l.lastPaymentDate}</span>
+              <span className="text-[0.75rem] text-[var(--text-muted)]">{l.lastActivityDate || '—'}</span>
               <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', st.bg)}>
                 <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />
                 <span className={cn('text-[0.6875rem] font-semibold capitalize', st.text)}>{l.status}</span>

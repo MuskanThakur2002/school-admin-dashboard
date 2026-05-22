@@ -36,10 +36,10 @@ interface Draft {
 }
 
 const STATUS_OPTIONS: { value: AttendanceStatus; label: string; activeBg: string; activeText: string; idleText: string; dot: string }[] = [
-  { value: 'Present', label: 'P',  activeBg: 'bg-emerald-500', activeText: 'text-white', idleText: 'text-emerald-700', dot: 'bg-emerald-500' },
-  { value: 'Absent',  label: 'A',  activeBg: 'bg-red-500',     activeText: 'text-white', idleText: 'text-red-700',     dot: 'bg-red-500' },
-  { value: 'Late',    label: 'L',  activeBg: 'bg-amber-500',   activeText: 'text-white', idleText: 'text-amber-700',   dot: 'bg-amber-500' },
-  { value: 'Leave',   label: 'Lv', activeBg: 'bg-blue-500',    activeText: 'text-white', idleText: 'text-blue-700',    dot: 'bg-blue-500' },
+  { value: 'Present', label: 'P',  activeBg: 'bg-emerald-100 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/15 dark:ring-emerald-400/30', activeText: 'text-emerald-800 dark:text-emerald-300', idleText: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  { value: 'Absent',  label: 'A',  activeBg: 'bg-red-100 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:ring-red-400/30',                 activeText: 'text-red-800 dark:text-red-300',         idleText: 'text-red-700 dark:text-red-400',         dot: 'bg-red-500' },
+  { value: 'Late',    label: 'L',  activeBg: 'bg-amber-100 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:ring-amber-400/30',         activeText: 'text-amber-800 dark:text-amber-300',     idleText: 'text-amber-700 dark:text-amber-400',     dot: 'bg-amber-500' },
+  { value: 'Leave',   label: 'Lv', activeBg: 'bg-blue-100 ring-1 ring-inset ring-blue-200 dark:bg-blue-500/15 dark:ring-blue-400/30',             activeText: 'text-blue-800 dark:text-blue-300',       idleText: 'text-blue-700 dark:text-blue-400',       dot: 'bg-blue-500' },
 ];
 
 export default function AttendanceListPage() {
@@ -229,7 +229,7 @@ export default function AttendanceListPage() {
       const dirty = d.status !== d.savedStatus || d.remarks !== d.savedRemarks;
       if (!dirty || d.status === '') continue;
 
-      const remarks = d.remarks.trim() || null;
+      const remarks = d.remarks.trim();
       if (d.recordId) {
         // Existing record → PUT, preserve original markedById for audit.
         tasks.push(
@@ -237,7 +237,7 @@ export default function AttendanceListPage() {
             studentEnrollmentId: d.enrollmentId,
             date,
             status: d.status,
-            remarks,
+            ...(remarks && { remarks }),
             markedById: d.markedById ?? currentUserId,
           })
             .then(() => { okCount += 1; })
@@ -249,7 +249,7 @@ export default function AttendanceListPage() {
             studentEnrollmentId: d.enrollmentId,
             date,
             status: d.status,
-            remarks,
+            ...(remarks && { remarks }),
             markedById: currentUserId,
           })
             .then(() => { okCount += 1; })
@@ -471,7 +471,7 @@ export default function AttendanceListPage() {
       )}
 
       {sectionPicked && rosterEnrollments.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--border-subtle)] bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75">
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--border-subtle)] bg-[var(--card-bg)] shadow-[0_-2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-2px_12px_rgba(0,0,0,0.4)]">
           <div className="max-w-[1280px] mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <p className="text-[0.8125rem] text-[var(--text-secondary)]">
               <span className="font-semibold text-[var(--text-primary)]">{counts.dirty}</span> change{counts.dirty === 1 ? '' : 's'} pending

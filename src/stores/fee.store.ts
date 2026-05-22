@@ -80,6 +80,12 @@ interface FeeState {
   updateAssignment: (id: string, dto: UpdateFeeAssignmentDto) => Promise<FeeAssignment>;
   deleteAssignment: (id: string) => Promise<void>;
   bulkAssignByClass: (dto: BulkClassAssignmentDto) => Promise<number>;
+  /**
+   * Returns the set of student enrollment IDs already assigned to the given
+   * fee structure. Pages through results so the answer is exhaustive — used
+   * by the assignment modal to hide already-assigned students.
+   */
+  fetchAssignedEnrollmentIds: (feeStructureId: string) => Promise<Set<string>>;
 
   // ─── Plans (mock) ──────────────────────────────────
   fetchPlans: () => Promise<void>;
@@ -352,6 +358,24 @@ export const useFeeStore = create<FeeState>((set) => ({
       });
     }
     return created;
+  },
+
+  fetchAssignedEnrollmentIds: async (feeStructureId) => {
+    const schoolId = resolveSchoolId();
+    const ids = new Set<string>();
+    const limit = 200;
+    let page = 1;
+    // Loop until the backend returns fewer rows than the page size, which
+    // means we've reached the end. Bounded by `total` as a safety net so a
+    // misbehaving backend can't spin us forever.
+    for (;;) {
+      const res = await feeApi.listAssignments(schoolId, { page, limit, feeStructureId });
+      for (const a of res.data) ids.add(a.studentEnrollmentId);
+      if (res.data.length < limit) break;
+      if (page * limit >= res.total) break;
+      page += 1;
+    }
+    return ids;
   },
 
   // ─── Plans (mock) ──────────────────────────────────

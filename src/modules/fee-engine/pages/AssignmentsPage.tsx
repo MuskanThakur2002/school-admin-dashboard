@@ -12,8 +12,7 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { Pagination } from '@/components/ui/Pagination/Pagination';
-import { FeeEngineNav } from '@/modules/fee-engine/components/FeeEngineNav';
-import type { FeeAssignment, FeeStructure } from '@/types/fee.types';
+import type { FeeAssignment, FeeStructure, BulkClassAssignmentDto } from '@/types/fee.types';
 import type { StudentEnrollment } from '@/types/student.types';
 import type { ClassGroup } from '@/types/academic.types';
 
@@ -130,8 +129,6 @@ export default function AssignmentsPage() {
 
   return (
     <div className="max-w-[1280px]">
-      <FeeEngineNav description="An assignment links a student enrollment to a fee structure. Use per-student concessions (%) or scholarship amounts to give individual discounts on top of the structure." />
-
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -350,8 +347,8 @@ export default function AssignmentsPage() {
         onOpenChange={setBulkOpen}
         classes={classes}
         structures={structures}
-        onSubmit={async ({ classSectionId, academicYearId, feeStructureId }) => {
-          const created = await bulkAssignByClass({ classSectionId, academicYearId, feeStructureId });
+        onSubmit={async (dto) => {
+          const created = await bulkAssignByClass(dto);
           showToast({
             type: 'success',
             title: 'Bulk assignment complete',
@@ -400,7 +397,10 @@ function AssignmentFormModal({
   const [concessionPercent, setConcessionPercent] = useState(String(initial?.concessionPercent ?? 0));
   const [scholarshipAmount, setScholarshipAmount] = useState(String(initial?.scholarshipAmount ?? 0));
   const [saving, setSaving] = useState(false);
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
+  const [loadingAssigned, setLoadingAssigned] = useState(false);
   const showToast = useUIStore((s) => s.showToast);
+  const fetchAssignedEnrollmentIds = useFeeStore((s) => s.fetchAssignedEnrollmentIds);
 
   useEffect(() => {
     if (open) {
@@ -408,12 +408,62 @@ function AssignmentFormModal({
       setFeeStructureId(initial?.feeStructureId ?? '');
       setConcessionPercent(String(initial?.concessionPercent ?? 0));
       setScholarshipAmount(String(initial?.scholarshipAmount ?? 0));
+      setAssignedIds(new Set());
     }
   }, [open, initial?.studentEnrollmentId, initial?.feeStructureId, initial?.concessionPercent, initial?.scholarshipAmount]);
 
+  // Whenever the chosen fee structure changes, pull the list of enrollments
+  // already assigned to it so we can hide them from the student dropdown.
+  // Stale-response guard via `cancelled` so a fast structure-switch doesn't
+  // let an earlier response overwrite a later one.
+  useEffect(() => {
+    if (!open || !feeStructureId) {
+      setAssignedIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    setLoadingAssigned(true);
+    fetchAssignedEnrollmentIds(feeStructureId)
+      .then((ids) => {
+        if (!cancelled) setAssignedIds(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setAssignedIds(new Set());
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAssigned(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, feeStructureId, fetchAssignedEnrollmentIds]);
+
+  // Keep the currently-edited student visible even if they're in the
+  // assigned set (they ARE the assignment being edited).
+  const editingEnrollmentId = initial?.studentEnrollmentId;
+  const availableEnrollments = enrollments.filter(
+    (e) => !assignedIds.has(e.id) || e.id === editingEnrollmentId,
+  );
+  const allFiltered =
+    !!feeStructureId
+    && !loadingAssigned
+    && enrollments.length > 0
+    && availableEnrollments.length === 0;
+
+  // If the currently selected student gets filtered out by a structure
+  // change (create mode), clear the selection so we don't submit a hidden
+  // value.
+  useEffect(() => {
+    if (
+      studentEnrollmentId
+      && studentEnrollmentId !== editingEnrollmentId
+      && assignedIds.has(studentEnrollmentId)
+    ) {
+      setStudentEnrollmentId('');
+    }
+  }, [assignedIds, studentEnrollmentId, editingEnrollmentId]);
+
   const enrollmentOptions = [
     { label: 'Select student...', value: '' },
-    ...enrollments.map((e) => ({ label: enrollmentLabel(e), value: e.id })),
+    ...availableEnrollments.map((e) => ({ label: enrollmentLabel(e), value: e.id })),
   ];
 
   const structureOptions = [
@@ -468,17 +518,30 @@ function AssignmentFormModal({
     >
       <div className="space-y-4">
         <Select
-          label="Student *"
-          options={enrollmentOptions}
-          value={studentEnrollmentId}
-          onChange={(e) => setStudentEnrollmentId(e.target.value)}
-        />
-        <Select
           label="Fee Structure *"
           options={structureOptions}
           value={feeStructureId}
           onChange={(e) => setFeeStructureId(e.target.value)}
         />
+        <div>
+          <Select
+            label="Student *"
+            options={enrollmentOptions}
+            value={studentEnrollmentId}
+            onChange={(e) => setStudentEnrollmentId(e.target.value)}
+            disabled={!feeStructureId || loadingAssigned}
+          />
+          {feeStructureId && loadingAssigned && (
+            <p className="text-[0.6875rem] text-[var(--text-muted)] mt-1">
+              Checking which students are already assigned…
+            </p>
+          )}
+          {allFiltered && (
+            <p className="text-[0.6875rem] text-amber-600 mt-1">
+              All students are already assigned to this fee structure.
+            </p>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Input
@@ -533,21 +596,24 @@ interface BulkClassAssignModalProps {
   onOpenChange: (open: boolean) => void;
   classes: ClassGroup[];
   structures: FeeStructure[];
-  onSubmit: (dto: {
-    classSectionId: string;
-    academicYearId: string;
-    feeStructureId: string;
-  }) => Promise<void>;
+  onSubmit: (dto: BulkClassAssignmentDto) => Promise<void>;
 }
+
+type BulkMode = 'section' | 'class';
 
 function BulkClassAssignModal({
   open, onOpenChange, classes, structures, onSubmit,
 }: BulkClassAssignModalProps) {
+  const [mode, setMode] = useState<BulkMode>('section');
   const [sectionKey, setSectionKey] = useState('');
+  const [classMasterId, setClassMasterId] = useState('');
+  const [classYearId, setClassYearId] = useState('');
   const [feeStructureId, setFeeStructureId] = useState('');
   const [saving, setSaving] = useState(false);
   const showToast = useUIStore((s) => s.showToast);
   const structuresLoading = useFeeStore((s) => s.structuresLoading);
+  const years = useAcademicStore((s) => s.years);
+  const fetchYears = useAcademicStore((s) => s.fetchYears);
 
   // Flatten classes → sections. Skip sections missing an academicYearId, since
   // the backend requires it on the bulk-class payload.
@@ -566,37 +632,119 @@ function BulkClassAssignModal({
     return out;
   }, [classes]);
 
+  // Classes with at least one section that has an academic year — those are
+  // the only ones we can bulk-assign across (backend requires academicYearId).
+  const classMasterOptions = useMemo(
+    () =>
+      classes
+        .filter((c) => c.sections.some((s) => !!s.academicYearId))
+        .map((c) => ({ id: c.id, label: c.name })),
+    [classes],
+  );
+
+  // Academic years available for the picked class master (unique IDs across
+  // its sections). Year names are looked up from useAcademicStore.years.
+  const yearOptionsForClass = useMemo(() => {
+    if (!classMasterId) return [] as { id: string; label: string }[];
+    const cls = classes.find((c) => c.id === classMasterId);
+    if (!cls) return [];
+    const yearIds = Array.from(
+      new Set(
+        cls.sections
+          .map((s) => s.academicYearId)
+          .filter((id): id is string => !!id),
+      ),
+    );
+    return yearIds.map((id) => ({
+      id,
+      label: years.find((y) => y.id === id)?.name ?? id.slice(0, 8),
+    }));
+  }, [classMasterId, classes, years]);
+
   const selectedSection = sectionOptions.find((s) => s.classSectionId === sectionKey) ?? null;
 
-  // Only fee structures matching the picked section's academic year are eligible.
+  // Effective academic year — section mode derives it from the chosen section;
+  // class mode reads the explicit year picker. Drives structure filtering.
+  const academicYearId =
+    mode === 'section' ? (selectedSection?.academicYearId ?? '') : classYearId;
+
+  // Only fee structures matching the active academic year are eligible.
   const eligibleStructures = useMemo(() => {
-    if (!selectedSection) return [];
-    return structures.filter((s) => s.academicYearId === selectedSection.academicYearId);
-  }, [structures, selectedSection]);
+    if (!academicYearId) return [];
+    return structures.filter((s) => s.academicYearId === academicYearId);
+  }, [structures, academicYearId]);
 
   useEffect(() => {
     if (open) {
+      setMode('section');
       setSectionKey('');
+      setClassMasterId('');
+      setClassYearId('');
       setFeeStructureId('');
+      // Need year names for the class-mode picker.
+      if (years.length === 0) fetchYears();
     }
-  }, [open]);
+  }, [open, years.length, fetchYears]);
 
-  // Clear the structure pick if the chosen one isn't valid for the new section's year.
+  // Auto-select the only available year for the chosen class; clear the year
+  // pick if the class change invalidated it.
+  useEffect(() => {
+    if (mode !== 'class') return;
+    if (yearOptionsForClass.length === 1) {
+      if (classYearId !== yearOptionsForClass[0].id) setClassYearId(yearOptionsForClass[0].id);
+      return;
+    }
+    if (classYearId && !yearOptionsForClass.some((y) => y.id === classYearId)) {
+      setClassYearId('');
+    }
+  }, [mode, yearOptionsForClass, classYearId]);
+
+  // Clear the structure pick if the chosen one isn't valid for the active year.
   useEffect(() => {
     if (feeStructureId && !eligibleStructures.some((s) => s.id === feeStructureId)) {
       setFeeStructureId('');
     }
   }, [eligibleStructures, feeStructureId]);
 
+  const handleModeChange = (next: BulkMode) => {
+    if (next === mode) return;
+    setMode(next);
+    if (next === 'section') {
+      setClassMasterId('');
+      setClassYearId('');
+    } else {
+      setSectionKey('');
+    }
+  };
+
   const sectionDropdownOptions = [
     { label: sectionOptions.length ? 'Select a class section...' : 'No class sections found', value: '' },
     ...sectionOptions.map((s) => ({ label: s.label, value: s.classSectionId })),
   ];
 
+  const classDropdownOptions = [
+    { label: classMasterOptions.length ? 'Select a class...' : 'No classes found', value: '' },
+    ...classMasterOptions.map((c) => ({ label: c.label, value: c.id })),
+  ];
+
+  const yearDropdownOptions = [
+    {
+      label: !classMasterId
+        ? 'Pick a class first'
+        : yearOptionsForClass.length
+          ? 'Select an academic year...'
+          : 'No academic years for this class',
+      value: '',
+    },
+    ...yearOptionsForClass.map((y) => ({ label: y.label, value: y.id })),
+  ];
+
   const structureDropdownOptions = [
     {
-      label: !selectedSection
-        ? 'Pick a class section first'
+      label: !academicYearId
+        ? mode === 'section'
+          ? 'Pick a class section first'
+          : 'Pick a class and year first'
         : structuresLoading
           ? 'Loading fee structures...'
           : eligibleStructures.length
@@ -607,17 +755,27 @@ function BulkClassAssignModal({
     ...eligibleStructures.map((s) => ({ label: s.name, value: s.id })),
   ];
 
-  const canSubmit = !!selectedSection && !!feeStructureId;
+  const canSubmit =
+    !!feeStructureId
+    && !!academicYearId
+    && (mode === 'section' ? !!selectedSection : !!classMasterId);
 
   const handleSubmit = async () => {
-    if (!canSubmit || !selectedSection || saving) return;
+    if (!canSubmit || saving) return;
     setSaving(true);
     try {
-      await onSubmit({
-        classSectionId: selectedSection.classSectionId,
-        academicYearId: selectedSection.academicYearId,
-        feeStructureId,
-      });
+      const dto: BulkClassAssignmentDto = mode === 'section'
+        ? {
+            classSectionId: selectedSection!.classSectionId,
+            academicYearId: selectedSection!.academicYearId,
+            feeStructureId,
+          }
+        : {
+            classMasterId,
+            academicYearId: classYearId,
+            feeStructureId,
+          };
+      await onSubmit(dto);
       onOpenChange(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not assign fees.';
@@ -627,50 +785,105 @@ function BulkClassAssignModal({
     }
   };
 
+  const modeOptions: { key: BulkMode; label: string }[] = [
+    { key: 'section', label: 'Single Section' },
+    { key: 'class', label: 'Whole Class' },
+  ];
+
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
       title="Bulk Assign Fees by Class"
-      description="Assigns one fee structure to every enrollment in the chosen class section. Concession and scholarship default to 0 — adjust per-student afterwards if needed."
+      description={
+        mode === 'section'
+          ? 'Assigns one fee structure to every enrollment in the chosen class section. Concession and scholarship default to 0 — adjust per-student afterwards if needed.'
+          : 'Assigns one fee structure to every enrollment across all sections of the chosen class for the selected academic year.'
+      }
       size="lg"
       footer={
         <>
           <Button variant="tertiary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
           <Button onClick={handleSubmit} loading={saving} disabled={saving || !canSubmit}>
-            Assign to Class
+            {mode === 'section' ? 'Assign to Section' : 'Assign to Class'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Select
-          label="Class Section *"
-          options={sectionDropdownOptions}
-          value={sectionKey}
-          onChange={(e) => setSectionKey(e.target.value)}
-          disabled={sectionOptions.length === 0}
-        />
+        <div className="inline-flex rounded-lg bg-[var(--card-bg-hover)] p-1">
+          {modeOptions.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => handleModeChange(opt.key)}
+              className={cn(
+                'px-3 py-1.5 text-[0.75rem] font-semibold rounded-md transition-all',
+                mode === opt.key
+                  ? 'bg-white text-[#002c98] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'section' ? (
+          <Select
+            label="Class Section *"
+            options={sectionDropdownOptions}
+            value={sectionKey}
+            onChange={(e) => setSectionKey(e.target.value)}
+            disabled={sectionOptions.length === 0}
+          />
+        ) : (
+          <>
+            <Select
+              label="Class *"
+              options={classDropdownOptions}
+              value={classMasterId}
+              onChange={(e) => setClassMasterId(e.target.value)}
+              disabled={classMasterOptions.length === 0}
+            />
+            <Select
+              label="Academic Year *"
+              options={yearDropdownOptions}
+              value={classYearId}
+              onChange={(e) => setClassYearId(e.target.value)}
+              disabled={!classMasterId || yearOptionsForClass.length === 0}
+            />
+          </>
+        )}
+
         <Select
           label="Fee Structure *"
           options={structureDropdownOptions}
           value={feeStructureId}
           onChange={(e) => setFeeStructureId(e.target.value)}
-          disabled={!selectedSection || structuresLoading || eligibleStructures.length === 0}
+          disabled={!academicYearId || structuresLoading || eligibleStructures.length === 0}
         />
-        {sectionOptions.length === 0 && (
+
+        {mode === 'section' && sectionOptions.length === 0 && (
           <p className="text-[0.6875rem] text-amber-600">
             No class sections found. Create sections in Academic Setup first.
           </p>
         )}
-        {selectedSection && eligibleStructures.length === 0 && (
+        {mode === 'class' && classMasterOptions.length === 0 && (
           <p className="text-[0.6875rem] text-amber-600">
-            No fee structures exist for this section's academic year. Create one in Fee Structures.
+            No classes with active sections found. Create them in Academic Setup first.
+          </p>
+        )}
+        {academicYearId && eligibleStructures.length === 0 && (
+          <p className="text-[0.6875rem] text-amber-600">
+            No fee structures exist for the selected academic year. Create one in Fee Structures.
           </p>
         )}
         <div className="rounded-lg bg-blue-50 p-3">
           <p className="text-[0.6875rem] text-blue-700 leading-relaxed">
-            Every student currently enrolled in this section will be linked to the chosen structure. Students enrolled later are not linked automatically.
+            {mode === 'section'
+              ? 'Every student currently enrolled in this section will be linked to the chosen structure. Students enrolled later are not linked automatically.'
+              : 'Every student currently enrolled across all sections of this class for the chosen year will be linked. Students enrolled later are not linked automatically.'}
           </p>
         </div>
       </div>

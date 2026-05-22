@@ -53,6 +53,12 @@ export default function StudentLedgerPage() {
   const [refundRef, setRefundRef] = useState('');
   const [refundReason, setRefundReason] = useState('');
 
+  const [showChargeModal, setShowChargeModal] = useState(false);
+  const [charging, setCharging] = useState(false);
+  const [chargeCategory, setChargeCategory] = useState('');
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [chargeRemarks, setChargeRemarks] = useState('');
+
   useEffect(() => {
     if (years.length === 0) fetchYears();
   }, [years.length, fetchYears]);
@@ -105,9 +111,9 @@ export default function StudentLedgerPage() {
         ledgerEntryId: selectedDebitId,
         amount: Number(payAmount),
         paymentMode: payMode,
-        transactionRef: payRef,
+        ...(payRef.trim() ? { transactionRef: payRef.trim() } : {}),
         status: 'confirmed',
-        receiptNumber: payReceiptNo,
+        ...(payReceiptNo.trim() ? { receiptNumber: payReceiptNo.trim() } : {}),
         paidAt: new Date(payPaidAt).toISOString(),
       });
       await fetchEnrollmentLedger(enrollmentId);
@@ -118,6 +124,43 @@ export default function StudentLedgerPage() {
       showToast({ type: 'error', title: 'Payment failed', message: (err as Error).message });
     } finally {
       setPosting(false);
+    }
+  };
+
+  const resetChargeForm = () => {
+    setChargeCategory('');
+    setChargeAmount('');
+    setChargeRemarks('');
+  };
+
+  const handlePostCharge = async () => {
+    if (!enrollmentId || !activeYearId || !userId) {
+      showToast({ type: 'error', title: 'Cannot post', message: 'Missing enrollment, year, or user context' });
+      return;
+    }
+    if (!chargeCategory.trim() || !chargeAmount || Number(chargeAmount) <= 0 || !chargeRemarks.trim()) return;
+    setCharging(true);
+    try {
+      await createEntry({
+        studentEnrollmentId: enrollmentId,
+        academicYearId: activeYearId,
+        entryType: 'Debit',
+        category: chargeCategory.trim(),
+        amount: Number(chargeAmount),
+        runningBalance: 0,
+        reference: '',
+        paymentMode: 'charge',
+        remarks: chargeRemarks.trim(),
+        createdById: userId,
+      });
+      await fetchEnrollmentLedger(enrollmentId);
+      showToast({ type: 'success', title: 'Charge posted', message: `${fmt(Number(chargeAmount))} added to ledger` });
+      setShowChargeModal(false);
+      resetChargeForm();
+    } catch (err) {
+      showToast({ type: 'error', title: 'Charge failed', message: (err as Error).message });
+    } finally {
+      setCharging(false);
     }
   };
 
@@ -221,6 +264,9 @@ export default function StudentLedgerPage() {
         <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all">
           <Plus className="w-4 h-4" /> Post Payment
         </button>
+        <button onClick={() => setShowChargeModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[var(--card-bg-hover)] text-[var(--text-primary)] text-[0.8125rem] font-semibold hover:bg-[var(--border-subtle)] transition-all">
+          <Plus className="w-4 h-4" /> New Charge
+        </button>
         {isOverpaid && (
           <button onClick={() => setShowRefundModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-blue-600 text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(37,99,235,0.3)] hover:brightness-110 transition-all">
             <RotateCcw className="w-4 h-4" /> Process Refund
@@ -233,8 +279,8 @@ export default function StudentLedgerPage() {
 
       {/* Ledger journal */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Date', 'Description', 'Type', 'Debit', 'Credit', 'Balance'].map((h) => (
+        <div className="grid grid-cols-[90px_2fr_70px_70px_1fr_1fr_1fr] gap-3 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          {['Date', 'Category', 'Mode', 'Type', 'Debit', 'Credit', 'Balance'].map((h) => (
             <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
           ))}
         </div>
@@ -244,15 +290,17 @@ export default function StudentLedgerPage() {
           const amount = Number(entry.amount);
           const balance = Number(entry.runningBalance);
           const date = entry.createdAt.slice(0, 10);
-          const description = entry.remarks || entry.category;
+          const showRemarks = entry.remarks && entry.remarks !== entry.category;
           return (
-            <div key={entry.id} className={cn('grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 items-center px-6 py-3.5 hover:bg-[var(--card-bg-hover)] transition-colors',
+            <div key={entry.id} className={cn('grid grid-cols-[90px_2fr_70px_70px_1fr_1fr_1fr] gap-3 items-center px-6 py-3.5 hover:bg-[var(--card-bg-hover)] transition-colors',
               idx < entries.length - 1 && 'border-b border-[var(--border-subtle)]')}>
               <span className="text-[0.75rem] text-[var(--text-muted)]">{date}</span>
               <div className="min-w-0">
-                <p className="text-[0.8125rem] text-[var(--text-secondary)] truncate">{description}</p>
-                {entry.reference && <p className="text-[0.625rem] text-[var(--text-ghost)]">Ref: {entry.reference}</p>}
+                <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{entry.category || '—'}</p>
+                {entry.reference && <p className="text-[0.625rem] text-[var(--text-ghost)] truncate">Ref: {entry.reference}</p>}
+                {showRemarks && <p className="text-[0.625rem] text-[var(--text-ghost)] truncate">{entry.remarks}</p>}
               </div>
+              <span className="text-[0.6875rem] font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">{entry.paymentMode || '—'}</span>
               <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md w-fit', isDebit ? 'bg-red-50' : 'bg-emerald-50')}>
                 {isDebit ? <ArrowUpRight className="w-3 h-3 text-red-500" /> : <ArrowDownRight className="w-3 h-3 text-emerald-600" />}
                 <span className={cn('text-[0.625rem] font-bold', isDebit ? 'text-red-500' : 'text-emerald-600')}>{isDebit ? 'DR' : 'CR'}</span>
@@ -265,8 +313,8 @@ export default function StudentLedgerPage() {
         })}
 
         {/* Totals */}
-        <div className="grid grid-cols-[90px_2fr_80px_1fr_1fr_1fr] gap-3 px-6 py-4 bg-[var(--card-bg-hover)]">
-          <span /><span className="text-[0.875rem] font-bold text-[var(--text-primary)]">Totals</span><span />
+        <div className="grid grid-cols-[90px_2fr_70px_70px_1fr_1fr_1fr] gap-3 px-6 py-4 bg-[var(--card-bg-hover)]">
+          <span /><span className="text-[0.875rem] font-bold text-[var(--text-primary)]">Totals</span><span /><span />
           <span className="font-display text-[0.875rem] font-extrabold text-red-500">{fmt(totalDebits)}</span>
           <span className="font-display text-[0.875rem] font-extrabold text-emerald-600">{fmt(totalCredits)}</span>
           <span className={cn('font-display text-[0.875rem] font-extrabold', currentBalance > 0 ? 'text-red-500' : currentBalance < 0 ? 'text-blue-600' : 'text-emerald-600')}>{currentBalance < 0 ? `(${fmt(Math.abs(currentBalance))})` : fmt(currentBalance)}</span>
@@ -353,6 +401,49 @@ export default function StudentLedgerPage() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {posting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {posting ? 'Posting...' : 'Post Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Charge Modal */}
+      {showChargeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-[var(--card-bg)] rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-[1.125rem] font-bold text-[var(--text-primary)]">New Charge</h2>
+              <button onClick={() => { setShowChargeModal(false); resetChargeForm(); }} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Category</label>
+                <input type="text" value={chargeCategory} onChange={(e) => setChargeCategory(e.target.value)} placeholder="e.g. Tuition Fee, Library, Transport"
+                  className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+              </div>
+
+              <div>
+                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Amount</label>
+                <input type="number" value={chargeAmount} onChange={(e) => setChargeAmount(e.target.value)} placeholder="0"
+                  className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+              </div>
+
+              <div>
+                <label className="block text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-1.5">Remarks</label>
+                <input type="text" value={chargeRemarks} onChange={(e) => setChargeRemarks(e.target.value)} placeholder="e.g. Q1 2026 tuition, Late fee for March"
+                  className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 mt-6">
+              <button onClick={() => { setShowChargeModal(false); resetChargeForm(); }} className="px-4 py-2.5 rounded-[10px] text-[0.8125rem] font-semibold text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] transition-all">
+                Cancel
+              </button>
+              <button onClick={handlePostCharge} disabled={charging || !chargeCategory.trim() || !chargeAmount || Number(chargeAmount) <= 0 || !chargeRemarks.trim()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {charging && <Loader2 className="w-4 h-4 animate-spin" />}
+                {charging ? 'Posting...' : 'Post Charge'}
               </button>
             </div>
           </div>

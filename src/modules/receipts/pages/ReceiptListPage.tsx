@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Download,
@@ -8,7 +8,7 @@ import {
   IndianRupee,
   Loader2,
   Plus,
-  Eye,
+  MoreHorizontal,
   Undo2,
   RotateCcw,
   Trash2,
@@ -108,10 +108,11 @@ export default function ReceiptListPage() {
   const handleRefund = async (row: EnrichedPayment, remarks: string) => {
     setBusyId(row.id);
     try {
-      // Append "-R" only once, even on repeat attempts.
-      const newReceipt = row.receiptNumber.endsWith('-R')
-        ? row.receiptNumber
-        : `${row.receiptNumber}-R`;
+      // Append "-R" only once, even on repeat attempts. Backend may return a
+      // null receipt number; fall back to the payment id so the suffix is still
+      // appended to *something* unique.
+      const base = row.receiptNumber || row.id.slice(0, 8);
+      const newReceipt = base.endsWith('-R') ? base : `${base}-R`;
       // `remarks` is sent for forward-compat; backend `Payment` model does not
       // persist it yet — see tmp/ISSUES.md → Module: Payments / Receipts (#3).
       const dto: Record<string, unknown> = {
@@ -132,10 +133,12 @@ export default function ReceiptListPage() {
   const handleUnrefund = async (row: EnrichedPayment) => {
     setBusyId(row.id);
     try {
-      const stripped = row.receiptNumber.endsWith('-R')
-        ? row.receiptNumber.slice(0, -2)
-        : row.receiptNumber;
-      await updatePayment(row.id, { status: 'Success', receiptNumber: stripped });
+      const current = row.receiptNumber ?? '';
+      const stripped = current.endsWith('-R') ? current.slice(0, -2) : current;
+      await updatePayment(row.id, {
+        status: 'Success',
+        ...(stripped ? { receiptNumber: stripped } : {}),
+      });
       showToast({ type: 'success', title: 'Refund reversed', message: `Receipt ${stripped}` });
       setConfirmUnrefund(null);
     } catch (err) {
@@ -183,7 +186,7 @@ export default function ReceiptListPage() {
   const filtered = rows.filter((r) => {
     const ms = !search ||
       r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-      r.receiptNumber.toLowerCase().includes(search.toLowerCase());
+      (r.receiptNumber ?? '').toLowerCase().includes(search.toLowerCase());
     const mst = !statusFilter || r.status === statusFilter;
     return ms && mst;
   });
@@ -262,8 +265,8 @@ export default function ReceiptListPage() {
         </div>
       ) : (
         <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="grid grid-cols-[1.2fr_1fr_1.8fr_1fr_0.8fr_1.2fr_0.9fr_auto] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-            {['Receipt No.', 'Paid At', 'Student', 'Amount', 'Mode', 'Transaction Ref', 'Status'].map((h) => (
+          <div className="grid grid-cols-[1.4fr_2fr_1fr_1fr_auto] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+            {['Receipt', 'Student', 'Amount', 'Status'].map((h) => (
               <span key={h} className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">{h}</span>
             ))}
             <span className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] text-right pr-1">Actions</span>
@@ -274,65 +277,47 @@ export default function ReceiptListPage() {
             </div>
           ) : filtered.map((r, idx) => {
             const st = statusStyle(r.status);
+            const studentSub = [r.admissionNo, r.section, r.paymentMode?.toUpperCase(), r.transactionRef]
+              .filter(Boolean)
+              .join(' · ');
             return (
-              <div key={r.id} className={cn('grid grid-cols-[1.2fr_1fr_1.8fr_1fr_0.8fr_1.2fr_0.9fr_auto] gap-4 items-center px-6 py-4 hover:bg-[var(--card-bg-hover)] transition-colors',
-                idx < filtered.length - 1 && 'border-b border-[var(--border-subtle)]')}>
-                <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide truncate">{r.receiptNumber || '—'}</span>
-                <span className="text-[0.75rem] text-[var(--text-muted)]">{r.paidAt ? r.paidAt.slice(0, 10) : '—'}</span>
+              <div
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleView(r)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleView(r);
+                  }
+                }}
+                className={cn(
+                  'grid grid-cols-[1.4fr_2fr_1fr_1fr_auto] gap-4 items-center px-6 py-4 cursor-pointer hover:bg-[var(--card-bg-hover)] focus:bg-[var(--card-bg-hover)] focus:outline-none transition-colors',
+                  idx < filtered.length - 1 && 'border-b border-[var(--border-subtle)]',
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="text-[0.75rem] font-bold text-[#002c98] tracking-wide truncate">{r.receiptNumber || '—'}</p>
+                  <p className="text-[0.6875rem] text-[var(--text-muted)] mt-0.5">{r.paidAt ? r.paidAt.slice(0, 10) : '—'}</p>
+                </div>
                 <div className="min-w-0">
                   <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{r.studentName || '—'}</p>
-                  <p className="text-[0.6875rem] text-[var(--text-muted)]">{r.admissionNo}{r.section ? ` · ${r.section}` : ''}</p>
+                  <p className="text-[0.6875rem] text-[var(--text-muted)] truncate">{studentSub || '—'}</p>
                 </div>
                 <span className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">{fmt(r.amountNum)}</span>
-                <span className="text-[0.75rem] font-semibold text-[var(--text-secondary)] uppercase">{r.paymentMode}</span>
-                <span className="text-[0.6875rem] text-[var(--text-muted)] truncate">{r.transactionRef || '—'}</span>
                 <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full w-fit', st.bg)}>
                   <span className={cn('w-1.5 h-1.5 rounded-full', st.dot)} />
                   <span className={cn('text-[0.6875rem] font-semibold capitalize', st.text)}>{r.status || 'unknown'}</span>
                 </div>
-                <div className="flex items-center justify-end gap-1">
-                  <button
-                    onClick={() => handleView(r)}
-                    title="View receipt"
-                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-[var(--border-subtle)] hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" strokeWidth={2} />
-                  </button>
-                  <button
-                    onClick={() => handlePrint(r)}
-                    title="Print receipt"
-                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-[var(--border-subtle)] hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    <Printer className="w-3.5 h-3.5" strokeWidth={2} />
-                  </button>
-                  {isRefunded(r.status) ? (
-                    <button
-                      onClick={() => setConfirmUnrefund(r)}
-                      disabled={busyId === r.id}
-                      title="Reverse refund"
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-emerald-50 hover:text-emerald-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmRefund(r)}
-                      disabled={busyId === r.id}
-                      title="Refund payment"
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-amber-50 hover:text-amber-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Undo2 className="w-3.5 h-3.5" strokeWidth={2} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setConfirmDelete(r)}
-                    disabled={busyId === r.id}
-                    title="Delete payment"
-                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
-                  </button>
-                </div>
+                <RowActionsMenu
+                  busy={busyId === r.id}
+                  isRefunded={isRefunded(r.status)}
+                  onPrint={() => handlePrint(r)}
+                  onRefund={() => setConfirmRefund(r)}
+                  onUnrefund={() => setConfirmUnrefund(r)}
+                  onDelete={() => setConfirmDelete(r)}
+                />
               </div>
             );
           })}
@@ -515,6 +500,93 @@ export default function ReceiptListPage() {
   );
 }
 
+function RowActionsMenu({
+  busy,
+  isRefunded,
+  onPrint,
+  onRefund,
+  onUnrefund,
+  onDelete,
+}: {
+  busy: boolean;
+  isRefunded: boolean;
+  onPrint: () => void;
+  onRefund: () => void;
+  onUnrefund: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  const items = [
+    { label: 'Print', icon: Printer, onClick: onPrint },
+    isRefunded
+      ? { label: 'Un-refund', icon: RotateCcw, onClick: onUnrefund }
+      : { label: 'Refund', icon: Undo2, onClick: onRefund },
+    { label: 'Delete', icon: Trash2, danger: true, onClick: onDelete },
+  ] as const;
+
+  return (
+    <div
+      ref={ref}
+      className="relative justify-self-end"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy}
+        title="More actions"
+        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-[var(--border-subtle)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <MoreHorizontal className="w-4 h-4" strokeWidth={2} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 min-w-[152px] bg-[var(--card-bg)] rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[var(--border-subtle)] py-1.5 animate-in fade-in-0 zoom-in-95 duration-100">
+          {items.map((it) => {
+            const danger = 'danger' in it && it.danger;
+            return (
+              <button
+                key={it.label}
+                onClick={() => {
+                  setOpen(false);
+                  it.onClick();
+                }}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3 py-1.5 text-[0.8125rem] font-medium text-left transition-colors',
+                  danger
+                    ? 'text-red-600 hover:bg-red-50'
+                    : 'text-[var(--text-tertiary)] hover:bg-[var(--border-subtle)] hover:text-[var(--text-primary)]',
+                )}
+              >
+                <it.icon className="w-3.5 h-3.5" strokeWidth={2} />
+                {it.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="min-w-0">
@@ -595,9 +667,8 @@ function RefundDialog({
   onConfirm: (remarks: string) => void;
 }) {
   const [remarks, setRemarks] = useState('');
-  const newReceipt = row.receiptNumber.endsWith('-R')
-    ? row.receiptNumber
-    : `${row.receiptNumber || row.id.slice(0, 8)}-R`;
+  const base = row.receiptNumber || row.id.slice(0, 8);
+  const newReceipt = base.endsWith('-R') ? base : `${base}-R`;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 animate-in fade-in-0 duration-150">
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in zoom-in-95 duration-150">

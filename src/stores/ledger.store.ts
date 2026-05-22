@@ -25,14 +25,17 @@ function resolveActiveYearId(): string | null {
   return years.find((y) => y.isCurrent)?.id ?? years[0]?.id ?? null;
 }
 
-function deriveStatus(balance: number, lastPaymentDate: string): LedgerStatus {
+function deriveStatus(balance: number, totalPaid: number, oldestDebitDate: string): LedgerStatus {
   if (balance < 0) return 'overpaid';
   if (balance === 0) return 'clear';
-  // overdue if no payment or last payment > 90 days ago, else partial
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  return !lastPaymentDate || lastPaymentDate < cutoffStr ? 'overdue' : 'partial';
+  // balance > 0 from here
+  if (oldestDebitDate) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    if (oldestDebitDate < cutoffStr) return 'overdue';
+  }
+  return totalPaid === 0 ? 'unpaid' : 'partial';
 }
 
 function buildSummaries(
@@ -63,6 +66,19 @@ function buildSummaries(
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const lastPaymentDate = credits[0]?.createdAt.slice(0, 10) ?? '';
 
+    // Latest entry of any type (Debit or Credit) — drives the "Last Activity"
+    // column so freshly-billed students with no payment still show a date.
+    const sortedDesc = [...group].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const lastActivityDate = sortedDesc[0]?.createdAt.slice(0, 10) ?? '';
+
+    // Oldest Debit drives the "overdue" threshold. We use the oldest Debit
+    // (not the oldest *unpaid* Debit) as a proxy since per-Debit settlement
+    // isn't tracked client-side.
+    const debits = group
+      .filter((e) => e.entryType === 'Debit')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const oldestDebitDate = debits[0]?.createdAt.slice(0, 10) ?? '';
+
     const classMasterId = enrollment?.classSection?.classMasterId;
     summaries.push({
       studentEnrollmentId: enrollmentId,
@@ -75,7 +91,8 @@ function buildSummaries(
       totalPaid,
       balance,
       lastPaymentDate,
-      status: deriveStatus(balance, lastPaymentDate),
+      lastActivityDate,
+      status: deriveStatus(balance, totalPaid, oldestDebitDate),
       overpaymentAmount: balance < 0 ? Math.abs(balance) : 0,
     });
   }

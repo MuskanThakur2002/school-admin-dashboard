@@ -135,9 +135,9 @@ export default function PaymentPostingPage() {
         ledgerEntryId: selectedDebitId,
         amount: Number(amount),
         paymentMode,
-        transactionRef,
+        ...(transactionRef.trim() ? { transactionRef: transactionRef.trim() } : {}),
         status,
-        receiptNumber,
+        ...(receiptNumber.trim() ? { receiptNumber: receiptNumber.trim() } : {}),
         paidAt: new Date(paidAt).toISOString(),
       });
       setPostedReceiptNo(created.receiptNumber || receiptNumber);

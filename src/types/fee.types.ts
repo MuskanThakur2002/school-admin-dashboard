@@ -85,13 +85,23 @@ export interface UpdateFeeAssignmentDto {
   scholarshipAmount?: number;
 }
 
-// Bulk-assign one fee structure to every enrollment in a class section.
-// Backend route: POST /schools/:schoolId/fee-assignments/bulk-class
-export interface BulkClassAssignmentDto {
-  classSectionId: string;
-  academicYearId: string;
-  feeStructureId: string;
-}
+// Bulk-assign one fee structure to every enrollment under either a single
+// class section or every section of a class master for an academic year.
+// Backend route: POST /schools/:schoolId/fee-assignments/bulk-class — must
+// provide exactly one of `classSectionId` or `classMasterId`.
+export type BulkClassAssignmentDto =
+  | {
+      classSectionId: string;
+      classMasterId?: never;
+      academicYearId: string;
+      feeStructureId: string;
+    }
+  | {
+      classMasterId: string;
+      classSectionId?: never;
+      academicYearId: string;
+      feeStructureId: string;
+    };
 
 export interface BulkClassAssignmentResult {
   created: number;

@@ -40,7 +40,7 @@ export type UpdateLedgerEntryDto = Partial<Omit<CreateLedgerEntryDto, 'createdBy
 // ─── UI-Derived Summary ────────────────────────────────────
 // The backend has no summary endpoint — this is computed client-side
 // from the ledger entries list grouped by studentEnrollmentId.
-export type LedgerStatus = 'clear' | 'partial' | 'overdue' | 'overpaid';
+export type LedgerStatus = 'clear' | 'unpaid' | 'partial' | 'overdue' | 'overpaid';
 
 export interface StudentLedgerSummary {
   studentEnrollmentId: string;
@@ -52,7 +52,12 @@ export interface StudentLedgerSummary {
   totalDue: number;
   totalPaid: number;
   balance: number;
+  // Date of the most recent Credit entry (i.e. last time the student paid).
+  // Empty string when the student has never paid.
   lastPaymentDate: string;
+  // Date of the most recent ledger entry of any type — useful for surfacing
+  // freshly-billed students (who have no payment yet) in the list view.
+  lastActivityDate: string;
   status: LedgerStatus;
   overpaymentAmount: number;
 }

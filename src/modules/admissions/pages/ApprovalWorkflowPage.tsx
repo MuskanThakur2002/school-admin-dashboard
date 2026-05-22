@@ -18,6 +18,10 @@ import { isSuperAdmin } from '@/types/auth.types';
 import type { Application } from '@/types/admissions.types';
 import type { FeeStructure } from '@/types/fee.types';
 
+// Matches the conventional names schools use for the joining/admission charge.
+// Drives both the auto-fill in the payment step and the "no matching head" warning.
+const ADMISSION_HEAD_PATTERN = /admission|joining|registration|enrollment/i;
+
 export default function ApprovalWorkflowPage() {
   // Verified applications come from a dedicated server-side filtered fetch so the
   // queue stays correct even when there are more than `limit` applications total.
@@ -77,7 +81,7 @@ export default function ApprovalWorkflowPage() {
   const [payMode, setPayMode] = useState<'cash' | 'cheque' | 'upi' | 'neft' | 'dd' | 'card' | 'online'>('cash');
   const [payTxnRef, setPayTxnRef] = useState('');
   const [payRemarks, setPayRemarks] = useState('');
-  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string; amount: number } | null>(null);
+  const [payReceipt, setPayReceipt] = useState<{ receiptNumber: string | null; amount: number } | null>(null);
   const collectInitialPayment = useAdmissionsStore((s) => s.collectInitialPayment);
 
   // Fee plan picker — required so the new enrollment gets linked to a fee structure
@@ -131,7 +135,7 @@ export default function ApprovalWorkflowPage() {
         if (cancelled) return;
         setStructureDetail(detail);
         const admissionItem = detail.feeStructureItems.find(
-          (it) => /admission/i.test(it.feeHead?.name ?? ''),
+          (it) => ADMISSION_HEAD_PATTERN.test(it.feeHead?.name ?? ''),
         );
         if (admissionItem) {
           setPayAmount(String(Number(admissionItem.amount) || ''));
@@ -625,10 +629,20 @@ export default function ApprovalWorkflowPage() {
                   <p className="text-[0.8125rem] font-semibold text-emerald-900">{structureDetail.name}</p>
                 </div>
               )}
-              {structureDetail && !structureDetail.feeStructureItems.some((it) => /admission/i.test(it.feeHead?.name ?? '')) && (
+              {structureDetail && !structureDetail.feeStructureItems.some((it) => ADMISSION_HEAD_PATTERN.test(it.feeHead?.name ?? '')) && (
                 <div className="rounded-lg bg-amber-50 p-3">
                   <p className="text-[0.6875rem] text-amber-800 leading-relaxed">
-                    This plan has no "Admission Fee" head — enter the amount manually.
+                    {structureDetail.feeStructureItems.length === 0 ? (
+                      <>This plan has no fee heads yet — enter the joining amount manually.</>
+                    ) : (
+                      <>
+                        Could not auto-fill — no head in this plan matches "Admission / Joining / Registration". Plan has:{' '}
+                        {structureDetail.feeStructureItems
+                          .map((it) => `${it.feeHead?.name ?? '—'} (₹${Number(it.amount).toLocaleString('en-IN')})`)
+                          .join(' · ')}
+                        . Enter the joining amount manually.
+                      </>
+                    )}
                   </p>
                 </div>
               )}
