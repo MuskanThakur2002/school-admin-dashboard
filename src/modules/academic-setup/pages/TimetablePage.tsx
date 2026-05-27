@@ -4,6 +4,7 @@ import { Clock, ArrowLeft, Plus, Trash2, Calendar, AlertTriangle } from 'lucide-
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Select } from '@/components/ui/Select/Select';
+import { Input } from '@/components/ui/Input/Input';
 import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAcademicStore } from '@/stores/academic.store';
@@ -38,6 +39,13 @@ const subjectColors: Record<string, string> = {
 
 const getSubjectColor = (code: string) => subjectColors[code] || 'bg-slate-50 text-slate-600';
 
+/** Add `mins` to an "HH:MM" time, clamped within a single day. */
+const addMinutes = (t: string, mins: number): string => {
+  const [h, m] = t.split(':').map(Number);
+  const total = Math.min(h * 60 + m + mins, 23 * 60 + 59);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+};
+
 export default function TimetablePage() {
   const navigate = useNavigate();
   const classes = useAcademicStore((s) => s.classes);
@@ -55,18 +63,31 @@ export default function TimetablePage() {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
-  const [hiddenSlotCount, setHiddenSlotCount] = useState(0);
+  const [extraRows, setExtraRows] = useState<{ start: string; end: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorDay, setEditorDay] = useState<DayOfWeek>('monday');
-  const [editorPeriod, setEditorPeriod] = useState(1);
+  const [editorStart, setEditorStart] = useState('09:00');
+  const [editorEnd, setEditorEnd] = useState('09:45');
+  const [editorExistingId, setEditorExistingId] = useState<string | undefined>(undefined);
   const [formSubjectId, setFormSubjectId] = useState('');
   const [formTeacherId, setFormTeacherId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const periods = useMemo(() => academicApi.getPeriods(), []);
+  const defaultPeriods = useMemo(() => academicApi.getDefaultPeriods(), []);
   const activeYear = useMemo(() => years.find((y) => y.isCurrent), [years]);
+
+  // Grid rows are derived from the default period times, the real start/end
+  // times of the section's slots, and any rows the user just added — deduped
+  // by start time and sorted. This guarantees every slot lands on a row.
+  const periodRows = useMemo(() => {
+    const byStart = new Map<string, { start: string; end: string }>();
+    for (const p of defaultPeriods) byStart.set(p.start, { start: p.start, end: p.end });
+    for (const s of slots) if (!byStart.has(s.startTime)) byStart.set(s.startTime, { start: s.startTime, end: s.endTime });
+    for (const r of extraRows) if (!byStart.has(r.start)) byStart.set(r.start, r);
+    return [...byStart.values()].sort((a, b) => a.start.localeCompare(b.start));
+  }, [defaultPeriods, slots, extraRows]);
 
   // Initial fetch
   useEffect(() => {
@@ -89,14 +110,14 @@ export default function TimetablePage() {
   useEffect(() => {
     if (!selectedClassId || !selectedSectionId) {
       setSlots([]);
-      setHiddenSlotCount(0);
+      setExtraRows([]);
       return;
     }
     setLoading(true);
     academicApi.getTimetable(selectedSectionId)
-      .then(({ slots, hiddenSlotCount }) => {
-        setSlots(slots);
-        setHiddenSlotCount(hiddenSlotCount);
+      .then((rows) => {
+        setSlots(rows);
+        setExtraRows([]);
       })
       .finally(() => setLoading(false));
   }, [selectedClassId, selectedSectionId]);
@@ -111,19 +132,36 @@ export default function TimetablePage() {
     setSelectedSectionId(cls?.sections[0]?.id || '');
   };
 
-  const findSlot = (day: DayOfWeek, period: number) =>
-    slots.find((s) => s.day === day && s.period === period);
+  const findSlot = (day: DayOfWeek, start: string) =>
+    slots.find((s) => s.day === day && s.startTime === start);
 
-  const openEditor = (day: DayOfWeek, period: number) => {
-    const existing = findSlot(day, period);
+  const openEditor = (day: DayOfWeek, start: string, end: string) => {
+    const existing = findSlot(day, start);
     setEditorDay(day);
-    setEditorPeriod(period);
+    setEditorStart(start);
+    setEditorEnd(end);
+    setEditorExistingId(existing?.id);
     setFormSubjectId(existing?.subjectId || '');
     setFormTeacherId(existing?.teacherId || '');
     setEditorOpen(true);
   };
 
+  const handleAddPeriod = () => {
+    const last = periodRows[periodRows.length - 1];
+    let start = last ? last.end : '09:00';
+    if (periodRows.some((r) => r.start === start)) start = addMinutes(start, 45);
+    setExtraRows((prev) => [...prev, { start, end: addMinutes(start, 45) }]);
+  };
+
   const handleSave = async () => {
+    if (!editorStart || !editorEnd) {
+      showToast({ type: 'error', title: 'Time required', message: 'Set a start and end time' });
+      return;
+    }
+    if (editorEnd <= editorStart) {
+      showToast({ type: 'error', title: 'Invalid time', message: 'End time must be after start time' });
+      return;
+    }
     if (!formSubjectId || !formTeacherId) {
       showToast({ type: 'error', title: 'Missing fields', message: 'Subject and teacher are required' });
       return;
@@ -144,19 +182,19 @@ export default function TimetablePage() {
     }
     setSubmitting(true);
     try {
-      const existing = findSlot(editorDay, editorPeriod);
       await setTimetableSlot({
         sectionId: selectedSectionId,
-        day: editorDay, period: editorPeriod,
+        day: editorDay,
+        startTime: editorStart, endTime: editorEnd,
         subjectId: formSubjectId, subjectName: subject.name,
         teacher: teacher.user?.name ?? '',
         teacherId: formTeacherId,
         academicYearId: activeYear.id,
-        existingId: existing?.id,
+        existingId: editorExistingId,
       });
       const fresh = await academicApi.getTimetable(selectedSectionId);
-      setSlots(fresh.slots);
-      setHiddenSlotCount(fresh.hiddenSlotCount);
+      setSlots(fresh);
+      setExtraRows([]);
       showToast({ type: 'success', title: 'Slot updated' });
       setEditorOpen(false);
     } catch (err) {
@@ -167,14 +205,13 @@ export default function TimetablePage() {
   };
 
   const handleClear = async () => {
-    const existing = findSlot(editorDay, editorPeriod);
-    if (!existing) return;
+    if (!editorExistingId) return;
     setSubmitting(true);
     try {
-      await clearTimetableSlot(existing.id);
+      await clearTimetableSlot(editorExistingId);
       const fresh = await academicApi.getTimetable(selectedSectionId);
-      setSlots(fresh.slots);
-      setHiddenSlotCount(fresh.hiddenSlotCount);
+      setSlots(fresh);
+      setExtraRows([]);
       showToast({ type: 'info', title: 'Slot cleared' });
       setEditorOpen(false);
     } catch (err) {
@@ -205,20 +242,6 @@ export default function TimetablePage() {
             <p className="text-[0.8125rem] font-semibold text-amber-900">No active academic year</p>
             <p className="text-[0.75rem] text-amber-700 mt-0.5">
               Mark one year as current under Academic Setup → Years before editing the timetable.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {hiddenSlotCount > 0 && (
-        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
-          <div>
-            <p className="text-[0.8125rem] font-semibold text-amber-900">
-              {hiddenSlotCount} slot{hiddenSlotCount === 1 ? '' : 's'} hidden
-            </p>
-            <p className="text-[0.75rem] text-amber-700 mt-0.5">
-              These slots exist on the server but don't match the standard period grid, so they can't be shown here. Contact support to reconcile them.
             </p>
           </div>
         </div>
@@ -290,27 +313,27 @@ export default function TimetablePage() {
               </div>
 
               {/* Period rows */}
-              {periods.map((p) => (
+              {periodRows.map((row, i) => (
                 <div
-                  key={p.period}
+                  key={row.start}
                   className="grid gap-px bg-[var(--border-subtle)]"
                   style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}
                 >
                   {/* Period label */}
                   <div className="bg-[var(--card-bg)] px-3 py-3 flex flex-col justify-center">
-                    <p className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">P{p.period}</p>
-                    <p className="text-[0.625rem] text-[var(--text-muted)]">{p.start} – {p.end}</p>
+                    <p className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">P{i + 1}</p>
+                    <p className="text-[0.625rem] text-[var(--text-muted)]">{row.start} – {row.end}</p>
                   </div>
 
                   {/* Day cells */}
                   {days.map((d) => {
-                    const slot = findSlot(d.id, p.period);
+                    const slot = findSlot(d.id, row.start);
                     const sub = slot ? subjects.find((s) => s.id === slot.subjectId) : null;
                     const colorClass = sub ? getSubjectColor(sub.code) : '';
                     return (
                       <button
-                        key={`${d.id}-${p.period}`}
-                        onClick={() => openEditor(d.id, p.period)}
+                        key={`${d.id}-${row.start}`}
+                        onClick={() => openEditor(d.id, row.start, row.end)}
                         disabled={!activeYear}
                         title={!activeYear ? 'Mark an academic year as current to edit slots' : undefined}
                         className={cn(
@@ -339,6 +362,17 @@ export default function TimetablePage() {
             </div>
           </div>
 
+          {/* Add period row */}
+          <div className="px-5 py-3 border-t border-[var(--border-subtle)]">
+            <button
+              onClick={handleAddPeriod}
+              disabled={!activeYear}
+              className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-[#002c98] hover:text-[#001f6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add period
+            </button>
+          </div>
+
           {/* Legend */}
           <div className="px-5 py-3 bg-[var(--card-bg-hover)] flex flex-wrap items-center gap-3">
             <span className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.06em] mr-2">Subjects:</span>
@@ -355,12 +389,12 @@ export default function TimetablePage() {
       <Modal
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        title={`Period ${editorPeriod} — ${days.find((d) => d.id === editorDay)?.label}`}
+        title={`${editorStart}–${editorEnd} · ${days.find((d) => d.id === editorDay)?.label}`}
         description={selectedClass ? `${selectedClass.name} ${selectedSection ? `· Section ${selectedSection.name}` : ''}` : ''}
         size="sm"
         footer={
           <div className="flex items-center justify-between w-full">
-            {findSlot(editorDay, editorPeriod) ? (
+            {editorExistingId ? (
               <button
                 onClick={handleClear}
                 disabled={submitting}
@@ -377,6 +411,24 @@ export default function TimetablePage() {
         }
       >
         <div className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Input
+                type="time"
+                label="Start *"
+                value={editorStart}
+                onChange={(e) => setEditorStart(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <Input
+                type="time"
+                label="End *"
+                value={editorEnd}
+                onChange={(e) => setEditorEnd(e.target.value)}
+              />
+            </div>
+          </div>
           <Select
             label="Subject *"
             options={availableSubjects.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))}

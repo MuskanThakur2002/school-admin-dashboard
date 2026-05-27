@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, HeartHandshake, Wallet, BookOpen,
   Receipt, Bell, Building2, Settings, ClipboardCheck, ClipboardList,
-  NotebookPen, ChevronLeft, ChevronRight, Sparkles, ListChecks,
+  NotebookPen, ChevronLeft, ChevronRight, Sparkles, ListChecks, UserCheck,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
   { label: 'Students', path: '/students', icon: Users, permission: 'students.read' },
   { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
   { label: 'Student Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
+  { label: 'Staff Attendance', path: '/teacher-attendance', icon: UserCheck, permission: 'attendance.read' },
   { label: 'Homework', path: '/homework', icon: NotebookPen, permission: 'homework.read' },
   { label: 'Exams', path: '/assessments', icon: ListChecks, permission: 'assessments.read' },
   { label: 'Guardians', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },

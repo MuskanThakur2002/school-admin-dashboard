@@ -79,6 +79,44 @@ export const studentsApi = {
     );
     return res.data;
   },
+
+  /**
+   * POST /schools/:schoolId/students/avatar/upload
+   * Upload an avatar WITHOUT attaching it to a student. Returns the S3 key
+   * (`fileUrl`) + a temporary signed `validUrl`; pass the key as `avatarUrl`
+   * on a later create/update.
+   */
+  uploadAvatar: async (
+    schoolId: string,
+    file: File,
+  ): Promise<{ fileUrl: string; validUrl: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<ApiEnvelope<{ fileUrl: string; validUrl: string; fileName: string }>>(
+      `/schools/${schoolId}/students/avatar/upload`,
+      fd,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /schools/:schoolId/students/:id/avatar/upload
+   * Upload an avatar AND set it on the student. Returns the updated student,
+   * the new `avatarUrl` key, and a temporary signed `validUrl`.
+   */
+  uploadStudentAvatar: async (
+    schoolId: string,
+    id: string,
+    file: File,
+  ): Promise<{ student: Student; avatarUrl: string; validUrl: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<ApiEnvelope<{ student: Student; avatarUrl: string; validUrl: string }>>(
+      `/schools/${schoolId}/students/${id}/avatar/upload`,
+      fd,
+    );
+    return res.data;
+  },
 };
 
 // ═════════════════════════════════════════════════════════════════

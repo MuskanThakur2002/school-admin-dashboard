@@ -95,6 +95,7 @@ export const router = createBrowserRouter([
 
               // Attendance (admin viewer — teachers mark via separate app)
               { path: 'attendance', element: lazyPage(() => import('@/modules/attendance/pages/AttendanceListPage')) },
+              { path: 'teacher-attendance', element: lazyPage(() => import('@/modules/attendance/pages/TeacherAttendanceListPage')) },
 
               // Homework
               { path: 'homework', element: lazyPage(() => import('@/modules/homework/pages/HomeworkListPage')) },

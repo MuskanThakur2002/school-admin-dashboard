@@ -36,6 +36,7 @@ interface StudentsState {
   createStudent: (dto: CreateStudentDto) => Promise<Student>;
   updateStudent: (id: string, dto: UpdateStudentDto) => Promise<Student>;
   deleteStudent: (id: string) => Promise<void>;
+  uploadAvatar: (id: string, file: File) => Promise<{ student: Student; validUrl: string }>;
 }
 
 export const useStudentsStore = create<StudentsState>((set) => ({
@@ -87,6 +88,15 @@ export const useStudentsStore = create<StudentsState>((set) => ({
       students: s.students.filter((stu) => stu.id !== id),
       total: Math.max(0, s.total - 1),
     }));
+  },
+
+  uploadAvatar: async (id, file) => {
+    const schoolId = resolveSchoolId();
+    const { student, validUrl } = await studentsApi.uploadStudentAvatar(schoolId, id, file);
+    set((s) => ({
+      students: s.students.map((stu) => (stu.id === id ? { ...stu, ...student } : stu)),
+    }));
+    return { student, validUrl };
   },
 }));
 
