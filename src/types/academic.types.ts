@@ -102,7 +102,6 @@ export interface TimetableSlot {
   id: string;
   sectionId: string;
   day: DayOfWeek;
-  period: number; // 1-8
   subjectId: string;
   subjectName: string; // denormalized for display
   teacherId: string;
@@ -114,7 +113,8 @@ export interface TimetableSlot {
 export interface CreateTimetableSlotDto {
   sectionId: string;
   day: DayOfWeek;
-  period: number;
+  startTime: string; // "09:00"
+  endTime: string;   // "09:45"
   subjectId: string;
   subjectName: string;
   teacher: string;

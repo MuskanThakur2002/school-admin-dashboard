@@ -44,7 +44,7 @@ interface AcademicState {
   deleteSubject: (id: string) => Promise<void>;
 
   // ─── Timetable ─────────────────────────────────
-  getTimetable: (sectionId: string) => Promise<{ slots: TimetableSlot[]; hiddenSlotCount: number }>;
+  getTimetable: (sectionId: string) => Promise<TimetableSlot[]>;
   setTimetableSlot: (dto: CreateTimetableSlotDto) => Promise<TimetableSlot>;
   clearTimetableSlot: (slotId: string) => Promise<void>;
 

@@ -149,16 +149,17 @@ function mapClass(b: BackendClassMaster, sections: Section[] = []): ClassGroup {
 }
 
 // ─── Mock DBs ──────────────────────────────────────────────
-// Fixed period grid the UI renders against. Backend stores arbitrary
-// start/end times per slot, so on read we match `startTime` back to one
-// of these entries to derive a period number.
-const periodTimes = [
-  { period: 1, start: '09:00', end: '09:45' },
-  { period: 2, start: '09:45', end: '10:30' },
-  { period: 3, start: '10:45', end: '11:30' },
-  { period: 4, start: '11:30', end: '12:15' },
-  { period: 5, start: '13:00', end: '13:45' },
-  { period: 6, start: '13:45', end: '14:30' },
+// Default period times used only to seed the timetable grid so an empty
+// section still shows a usable set of rows. The backend stores arbitrary
+// start/end times per slot; the UI derives its rows from the real slot times
+// unioned with these defaults, so no slot is ever hidden.
+const DEFAULT_PERIODS = [
+  { start: '09:00', end: '09:45' },
+  { start: '09:45', end: '10:30' },
+  { start: '10:45', end: '11:30' },
+  { start: '11:30', end: '12:15' },
+  { start: '13:00', end: '13:45' },
+  { start: '13:45', end: '14:30' },
 ];
 
 // ─── Timetable Slot backend wire format & mappers ─────────
@@ -402,58 +403,45 @@ export const academicApi = {
 
   // ─── Timetable ──────────────────────────────────────────
   /**
-   * GET /schools/:schoolId/timetable-slots — list endpoint has no
-   * section filter documented, so we pull a page and filter client-side.
-   * Period is derived by matching the slot's startTime back to the fixed
-   * `periodTimes` table; slots that don't line up cannot be placed in the
-   * grid, so we count them in `hiddenSlotCount` and the page renders a
-   * banner so admins know hidden data exists on the server.
+   * GET /schools/:schoolId/timetable-slots?classSectionId= — the list
+   * endpoint filters by section server-side, so we fetch only this section's
+   * slots. Each slot carries its real start/end time; the UI lays out grid
+   * rows from those times (unioned with `DEFAULT_PERIODS`), so every slot is
+   * placeable and nothing is hidden.
    */
-  getTimetable: async (
-    sectionId: string,
-  ): Promise<{ slots: TimetableSlot[]; hiddenSlotCount: number }> => {
+  getTimetable: async (sectionId: string): Promise<TimetableSlot[]> => {
     const schoolId = resolveSchoolId();
     const res = await api.get<PaginatedEnvelope<BackendTimetableSlot>>(
-      `/schools/${schoolId}/timetable-slots?page=1&limit=500`,
+      `/schools/${schoolId}/timetable-slots?classSectionId=${sectionId}&page=1&limit=500`,
     );
     const slots: TimetableSlot[] = [];
-    let hiddenSlotCount = 0;
     for (const b of res.data ?? []) {
       if (b.classSectionId !== sectionId) continue;
       const day = dayByNum[b.dayOfWeek];
-      const start = trimTime(b.startTime);
-      const periodEntry = periodTimes.find((p) => p.start === start);
-      if (!day || !periodEntry) {
-        hiddenSlotCount += 1;
-        continue;
-      }
+      if (!day) continue; // unmapped dayOfWeek (out of 0–6) — invalid record
       slots.push({
         id: b.id,
         sectionId: b.classSectionId,
         day,
-        period: periodEntry.period,
         subjectId: b.subjectId,
         subjectName: b.subject?.name ?? '',
         teacherId: b.teacherId,
         teacher: b.teacher?.user?.name ?? '',
-        startTime: start,
+        startTime: trimTime(b.startTime),
         endTime: trimTime(b.endTime),
       });
     }
-    return { slots, hiddenSlotCount };
+    return slots;
   },
 
   /**
    * Upsert a slot. If `dto.existingId` is set, PUT it; otherwise pre-flight
    * the tuple against the server (no unique constraint exists yet) and PUT
-   * the conflicting row if one is found, else POST. Backend stores time +
-   * dayOfWeek directly — `period` is a UI concept that we expand into
-   * startTime/endTime via the periodTimes table.
+   * the conflicting row if one is found, else POST. Backend stores the
+   * start/end time and dayOfWeek directly — the UI supplies them.
    */
   setTimetableSlot: async (dto: CreateTimetableSlotDto): Promise<TimetableSlot> => {
     const schoolId = resolveSchoolId();
-    const period = periodTimes.find((p) => p.period === dto.period);
-    if (!period) throw new Error('Invalid period');
 
     const body = {
       classSectionId: dto.sectionId,
@@ -461,24 +449,25 @@ export const academicApi = {
       teacherId: dto.teacherId,
       academicYearId: dto.academicYearId,
       dayOfWeek: numByDay[dto.day],
-      startTime: period.start,
-      endTime: period.end,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
     };
 
     let existingId = dto.existingId;
     if (!existingId) {
       // Pre-flight: another tab/user may have created a slot at this tuple
       // since our last fetch. Without a server unique constraint, skipping
-      // this check produces silent duplicates.
+      // this check produces silent duplicates. Filter to this section + year
+      // server-side so the lookup runs over a handful of rows, not the school.
       const pre = await api.get<PaginatedEnvelope<BackendTimetableSlot>>(
-        `/schools/${schoolId}/timetable-slots?page=1&limit=500`,
+        `/schools/${schoolId}/timetable-slots?classSectionId=${dto.sectionId}&academicYearId=${dto.academicYearId}&page=1&limit=100`,
       );
       const conflict = (pre.data ?? []).find(
         (b) =>
           b.classSectionId === dto.sectionId &&
           b.academicYearId === dto.academicYearId &&
           b.dayOfWeek === numByDay[dto.day] &&
-          trimTime(b.startTime) === period.start,
+          trimTime(b.startTime) === dto.startTime,
       );
       if (conflict) existingId = conflict.id;
     }
@@ -498,7 +487,6 @@ export const academicApi = {
       id: b.id,
       sectionId: b.classSectionId,
       day: dayByNum[b.dayOfWeek] ?? dto.day,
-      period: dto.period,
       subjectId: b.subjectId,
       subjectName: dto.subjectName,
       teacherId: b.teacherId,
@@ -514,7 +502,7 @@ export const academicApi = {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/timetable-slots/${slotId}`);
   },
 
-  getPeriods: () => periodTimes,
+  getDefaultPeriods: () => DEFAULT_PERIODS,
 
   // ─── Houses ─────────────────────────────────────────────
   getHouses: (): Promise<House[]> => delay([...housesDb]),
@@ -545,7 +533,43 @@ export const academicApi = {
   },
 
   // ─── Rollover ───────────────────────────────────────────
-  // Rollover itself is still mocked; counts come from the real backend.
+  // Sections and timetable slots are year-scoped and are cloned for real on
+  // the backend; classes/subjects are school-level and need no cloning.
+
+  /** POST /schools/:schoolId/academic-years/:targetYearId/clone-sections */
+  cloneSections: async (
+    targetYearId: string,
+    sourceYearId: string,
+  ): Promise<{ cloned: number; skippedDuplicate: number; sourceSectionCount: number }> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<
+      ApiEnvelope<{ cloned: number; skippedDuplicate: number; sourceSectionCount: number }>
+    >(`/schools/${schoolId}/academic-years/${targetYearId}/clone-sections`, { sourceYearId });
+    return res.data;
+  },
+
+  /** POST /schools/:schoolId/academic-years/:targetYearId/clone-timetable */
+  cloneTimetable: async (
+    targetYearId: string,
+    sourceYearId: string,
+  ): Promise<{
+    cloned: number;
+    skippedMissingSection: number;
+    skippedDuplicate: number;
+    sourceSlotCount: number;
+  }> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.post<
+      ApiEnvelope<{
+        cloned: number;
+        skippedMissingSection: number;
+        skippedDuplicate: number;
+        sourceSlotCount: number;
+      }>
+    >(`/schools/${schoolId}/academic-years/${targetYearId}/clone-timetable`, { sourceYearId });
+    return res.data;
+  },
+
   getRolloverPreview: async (sourceYearId: string, targetYearId: string): Promise<RolloverPreview> => {
     const schoolId = resolveSchoolId();
     const [years, classes, subjects, slotsRes] = await Promise.all([
@@ -553,7 +577,7 @@ export const academicApi = {
       academicApi.getClasses(),
       academicApi.getSubjects(),
       api.get<PaginatedEnvelope<BackendTimetableSlot>>(
-        `/schools/${schoolId}/timetable-slots?page=1&limit=1`,
+        `/schools/${schoolId}/timetable-slots?academicYearId=${sourceYearId}&page=1&limit=1`,
       ),
     ]);
     const source = years.find((y) => y.id === sourceYearId);
@@ -572,22 +596,32 @@ export const academicApi = {
   },
 
   executeRollover: async (req: RolloverRequest): Promise<RolloverResult> => {
-    const schoolId = resolveSchoolId();
-    const [classes, subjects, slotsRes] = await Promise.all([
+    // Classes and subjects are school-level (shared across years), so they need
+    // no cloning — we report their counts as "available". Sections and timetable
+    // slots are year-scoped and get genuinely cloned on the backend. Sections are
+    // cloned first so the timetable slots can be re-pointed onto the new sections.
+    const [classes, subjects] = await Promise.all([
       academicApi.getClasses(),
       academicApi.getSubjects(),
-      api.get<PaginatedEnvelope<BackendTimetableSlot>>(
-        `/schools/${schoolId}/timetable-slots?page=1&limit=1`,
-      ),
     ]);
-    const sectionCount = classes.reduce((sum, c) => sum + c.sections.length, 0);
-    const slotCount = slotsRes.total ?? 0;
-    // Mock: pretend we cloned everything requested
-    return delay({
+
+    let sectionsCloned = 0;
+    if (req.copySections) {
+      const r = await academicApi.cloneSections(req.targetYearId, req.sourceYearId);
+      sectionsCloned = r.cloned;
+    }
+
+    let timetableSlotsCloned = 0;
+    if (req.copyTimetable) {
+      const r = await academicApi.cloneTimetable(req.targetYearId, req.sourceYearId);
+      timetableSlotsCloned = r.cloned;
+    }
+
+    return {
       classesCloned: req.copyClasses ? classes.length : 0,
-      sectionsCloned: req.copySections ? sectionCount : 0,
+      sectionsCloned,
       subjectsCloned: req.copySubjects ? subjects.length : 0,
-      timetableSlotsCloned: req.copyTimetable ? slotCount : 0,
-    });
+      timetableSlotsCloned,
+    };
   },
 };

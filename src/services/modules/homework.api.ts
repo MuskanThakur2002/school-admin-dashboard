@@ -65,4 +65,41 @@ export const homeworkApi = {
   remove: async (schoolId: string, id: string): Promise<void> => {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/homework/${id}`);
   },
+
+  /**
+   * POST /schools/:schoolId/homework/upload
+   * Upload an attachment WITHOUT attaching it to a homework record. Returns
+   * the S3 key (`fileUrl`) + signed `validUrl`; include the key when posting
+   * homework.
+   */
+  uploadAttachmentFile: async (
+    schoolId: string,
+    file: File,
+  ): Promise<{ fileUrl: string; validUrl: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<ApiEnvelope<{ fileUrl: string; validUrl: string; fileName: string }>>(
+      `/schools/${schoolId}/homework/upload`,
+      fd,
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /schools/:schoolId/homework/:id/attachments/upload
+   * Upload a file and append it to the homework's `attachments.files[]`.
+   * Returns the updated homework plus the new file's key + signed URL.
+   */
+  uploadAttachment: async (
+    schoolId: string,
+    id: string,
+    file: File,
+  ): Promise<{ homework: Homework; fileUrl: string; validUrl: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<
+      ApiEnvelope<{ homework: Homework; fileUrl: string; validUrl: string; fileName: string }>
+    >(`/schools/${schoolId}/homework/${id}/attachments/upload`, fd);
+    return res.data;
+  },
 };

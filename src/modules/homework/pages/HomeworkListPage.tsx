@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Calendar, NotebookPen, Pencil, Trash2, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Calendar, NotebookPen, Pencil, Trash2, Search, X, Paperclip, ExternalLink } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -10,7 +10,8 @@ import { useUIStore } from '@/stores/ui.store';
 import { useHomeworkStore } from '@/stores/homework.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useTeacherStore } from '@/stores/teacher.store';
-import type { Homework } from '@/types/homework.types';
+import { getAttachmentFiles } from '@/types/homework.types';
+import type { Homework, HomeworkAttachmentFile } from '@/types/homework.types';
 
 interface FormState {
   classSectionId: string;
@@ -43,6 +44,7 @@ export default function HomeworkListPage() {
   const createHomework = useHomeworkStore((s) => s.createHomework);
   const updateHomework = useHomeworkStore((s) => s.updateHomework);
   const deleteHomework = useHomeworkStore((s) => s.deleteHomework);
+  const uploadAttachment = useHomeworkStore((s) => s.uploadAttachment);
 
   const years = useAcademicStore((s) => s.years);
   const classes = useAcademicStore((s) => s.classes);
@@ -287,6 +289,7 @@ export default function HomeworkListPage() {
         sectionOptions={sectionOptions}
         subjectOptions={subjectOptions}
         teacherOptions={teacherOptions}
+        onUploadAttachment={editing ? (file) => uploadAttachment(editing.id, file) : undefined}
         onSubmit={async (form) => {
           if (!editing) return;
           await updateHomework(editing.id, {
@@ -317,13 +320,18 @@ interface HomeworkFormModalProps {
   teacherOptions: { label: string; value: string }[];
   onSubmit: (form: FormState) => Promise<void>;
   onError: (message: string) => void;
+  /** Present only in edit mode — the homework must exist before files attach. */
+  onUploadAttachment?: (file: File) => Promise<Homework>;
 }
 
 function HomeworkFormModal({
-  mode, open, initial, onOpenChange, sectionOptions, subjectOptions, teacherOptions, onSubmit, onError,
+  mode, open, initial, onOpenChange, sectionOptions, subjectOptions, teacherOptions, onSubmit, onError, onUploadAttachment,
 }: HomeworkFormModalProps) {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [files, setFiles] = useState<HomeworkAttachmentFile[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -336,10 +344,27 @@ function HomeworkFormModal({
         description: initial.description,
         dueDate: initial.dueDate?.split('T')[0] ?? '',
       });
+      setFiles(getAttachmentFiles(initial.attachments));
     } else {
       setForm(emptyForm());
+      setFiles([]);
     }
   }, [open, initial]);
+
+  const handleAttachmentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file || !onUploadAttachment) return;
+    setUploadingFile(true);
+    try {
+      const updated = await onUploadAttachment(file);
+      setFiles(getAttachmentFiles(updated.attachments));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to upload attachment');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -431,6 +456,62 @@ function HomeworkFormModal({
             placeholder="Instructions for students..."
             className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.15)] transition-all resize-y"
           />
+        </div>
+
+        {/* Attachments — only once the homework exists (edit mode). */}
+        <div className="space-y-2">
+          <label className="block text-[0.75rem] font-semibold text-[var(--text-secondary)] tracking-wide">
+            Attachments
+          </label>
+          {mode === 'create' ? (
+            <p className="text-[0.75rem] text-[var(--text-muted)]">
+              Save the homework first, then reopen it to attach files.
+            </p>
+          ) : (
+            <>
+              {files.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {files.map((f, i) => (
+                    <li
+                      key={`${f.fileUrl}-${i}`}
+                      className="flex items-center gap-2 bg-[var(--card-bg-hover)] rounded-lg px-3 py-2"
+                    >
+                      <Paperclip className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" strokeWidth={2} />
+                      <span className="flex-1 min-w-0 truncate text-[0.75rem] text-[var(--text-primary)]">
+                        {f.fileName ?? f.fileUrl.split('/').pop() ?? 'Attachment'}
+                      </span>
+                      {(f.validUrl ?? f.fileUrl) && (
+                        <a
+                          href={f.validUrl ?? f.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-[#002c98] hover:underline shrink-0"
+                        >
+                          Open <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[0.75rem] text-[var(--text-muted)]">No attachments yet.</p>
+              )}
+              <Button
+                variant="tertiary"
+                onClick={() => fileInputRef.current?.click()}
+                loading={uploadingFile}
+                disabled={uploadingFile}
+              >
+                <Paperclip className="w-3.5 h-3.5" /> Add attachment
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleAttachmentChange}
+                className="hidden"
+              />
+            </>
+          )}
         </div>
       </div>
     </Modal>

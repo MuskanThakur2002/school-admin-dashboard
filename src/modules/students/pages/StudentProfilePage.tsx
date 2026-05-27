@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, User, GraduationCap, Calendar, Wallet, Building2, Users,
   FileText, CheckCircle2, Clock, ExternalLink, Pencil, XCircle, Plane, ClipboardCheck,
-  Plus, Trash2,
+  Plus, Trash2, Camera, Loader2,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
@@ -48,10 +48,18 @@ export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const getStudent = useStudentsStore((s) => s.getStudent);
+  const uploadAvatar = useStudentsStore((s) => s.uploadAvatar);
 
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Holds the temporary signed URL returned by the upload so the new avatar
+  // shows immediately; a fresh GET only returns the S3 key (`avatarUrl`).
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBroken, setAvatarBroken] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -79,11 +87,31 @@ export default function StudentProfilePage() {
     if (!id) return;
     setLoading(true);
     setError(null);
+    setAvatarPreview(null);
+    setAvatarBroken(false);
     getStudent(id)
       .then((s) => setStudent(s))
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
   }, [id, getStudent]);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file || !student) return;
+    setUploadingAvatar(true);
+    try {
+      const { student: updated, validUrl } = await uploadAvatar(student.id, file);
+      setStudent((prev) => (prev ? { ...prev, ...updated } : updated));
+      setAvatarPreview(validUrl);
+      setAvatarBroken(false);
+      showToast({ type: 'success', title: 'Avatar updated' });
+    } catch (err) {
+      showToast({ type: 'error', title: 'Upload failed', message: (err as Error).message });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   useEffect(() => {
     if (!student?.id) {
@@ -237,6 +265,10 @@ export default function StudentProfilePage() {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('') || '?';
 
+  // Prefer the signed URL from the latest upload; fall back to the stored key
+  // (which may not render as a plain <img> src — handled by onError → initials).
+  const avatarSrc = avatarPreview ?? student.avatarUrl ?? null;
+
   const isActive = student.status?.toLowerCase() === 'active';
 
   return (
@@ -250,8 +282,38 @@ export default function StudentProfilePage() {
 
       <div className="bg-[var(--card-bg)] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
         <div className="flex flex-col md:flex-row md:items-center gap-5">
-          <div className="w-[72px] h-[72px] rounded-2xl bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0 shadow-[0_4px_12px_rgba(0,44,152,0.25)]">
-            <span className="font-display text-[1.5rem] font-extrabold text-white">{initials}</span>
+          <div className="relative w-[72px] h-[72px] shrink-0">
+            <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center overflow-hidden shadow-[0_4px_12px_rgba(0,44,152,0.25)]">
+              {avatarSrc && !avatarBroken ? (
+                <img
+                  src={avatarSrc}
+                  alt={student.name}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarBroken(true)}
+                />
+              ) : (
+                <span className="font-display text-[1.5rem] font-extrabold text-white">{initials}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              title="Upload avatar"
+              aria-label="Upload avatar"
+              className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-white text-[#002c98] shadow-[0_2px_6px_rgba(0,0,0,0.18)] flex items-center justify-center hover:bg-blue-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {uploadingAvatar
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Camera className="w-3.5 h-3.5" strokeWidth={2} />}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
           </div>
 
           <div className="flex-1">

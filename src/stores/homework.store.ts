@@ -23,6 +23,7 @@ interface HomeworkState {
   createHomework: (input: Omit<CreateHomeworkDto, 'schoolId'>) => Promise<Homework>;
   updateHomework: (id: string, input: UpdateHomeworkDto) => Promise<Homework>;
   deleteHomework: (id: string) => Promise<void>;
+  uploadAttachment: (id: string, file: File) => Promise<Homework>;
 }
 
 function resolveSchoolId(): string {
@@ -106,5 +107,14 @@ export const useHomeworkStore = create<HomeworkState>((set, get) => ({
       items: s.items.filter((h) => h.id !== id),
       total: Math.max(0, s.total - 1),
     }));
+  },
+
+  uploadAttachment: async (id, file) => {
+    const schoolId = resolveSchoolId();
+    const { homework } = await homeworkApi.uploadAttachment(schoolId, id, file);
+    set((s) => ({
+      items: s.items.map((h) => (h.id === id ? { ...h, ...homework } : h)),
+    }));
+    return homework;
   },
 }));

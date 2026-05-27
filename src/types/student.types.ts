@@ -16,6 +16,10 @@ export interface Student {
   enrollmentDate: string | null;
   status: string;
   applicationId: string | null;
+  // S3 key for the student's avatar (e.g. "avatars/..."). A plain GET returns
+  // the key, not a signed URL; the upload endpoints return a temporary signed
+  // `validUrl` for immediate display.
+  avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
   school?: School;
@@ -28,6 +32,7 @@ export interface CreateStudentDto {
   gender: StudentGender;
   parentId: string;
   status: string;
+  avatarUrl?: string;
 }
 
 export type UpdateStudentDto = Partial<CreateStudentDto> & {
