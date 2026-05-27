@@ -75,4 +75,23 @@ export const assessmentsApi = {
   remove: async (schoolId: string, id: string): Promise<void> => {
     await api.delete<ApiEnvelope<unknown>>(`/schools/${schoolId}/assessments/${id}`);
   },
+
+  /**
+   * POST /schools/:schoolId/assessments/upload — requires MANAGE_ASSESSMENTS.
+   * Upload an exam image WITHOUT attaching it to a record. Returns the S3 key
+   * (`fileUrl`) + a temporary signed `validUrl`; pass the key as `imageUrl`
+   * on a later create/update.
+   */
+  uploadImage: async (
+    schoolId: string,
+    file: File,
+  ): Promise<{ fileUrl: string; validUrl: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.upload<ApiEnvelope<{ fileUrl: string; validUrl: string; fileName: string }>>(
+      `/schools/${schoolId}/assessments/upload`,
+      fd,
+    );
+    return res.data;
+  },
 };

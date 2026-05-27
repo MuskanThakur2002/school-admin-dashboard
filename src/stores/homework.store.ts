@@ -7,6 +7,7 @@ import type {
   CreateHomeworkDto,
   UpdateHomeworkDto,
   HomeworkListParams,
+  HomeworkAttachmentFile,
 } from '@/types/homework.types';
 
 interface HomeworkState {
@@ -24,6 +25,7 @@ interface HomeworkState {
   updateHomework: (id: string, input: UpdateHomeworkDto) => Promise<Homework>;
   deleteHomework: (id: string) => Promise<void>;
   uploadAttachment: (id: string, file: File) => Promise<Homework>;
+  uploadAttachmentFile: (file: File) => Promise<HomeworkAttachmentFile>;
 }
 
 function resolveSchoolId(): string {
@@ -116,5 +118,14 @@ export const useHomeworkStore = create<HomeworkState>((set, get) => ({
       items: s.items.map((h) => (h.id === id ? { ...h, ...homework } : h)),
     }));
     return homework;
+  },
+
+  // Standalone upload for the create flow — the homework doesn't exist yet,
+  // so we just return the stored key + signed URL to fold into the create
+  // payload's `attachments.files[]`.
+  uploadAttachmentFile: async (file) => {
+    const schoolId = resolveSchoolId();
+    const { fileUrl, validUrl, fileName } = await homeworkApi.uploadAttachmentFile(schoolId, file);
+    return { fileUrl, validUrl, fileName };
   },
 }));

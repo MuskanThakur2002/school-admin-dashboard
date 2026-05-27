@@ -22,6 +22,7 @@ interface AssessmentState {
   createAssessment: (input: Omit<CreateAssessmentDto, 'schoolId'>) => Promise<Assessment>;
   updateAssessment: (id: string, input: UpdateAssessmentDto) => Promise<Assessment>;
   deleteAssessment: (id: string) => Promise<void>;
+  uploadImage: (file: File) => Promise<{ fileUrl: string; validUrl: string }>;
 }
 
 function resolveSchoolId(): string {
@@ -95,5 +96,11 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       items: s.items.filter((a) => a.id !== id),
       total: Math.max(0, s.total - 1),
     }));
+  },
+
+  uploadImage: async (file) => {
+    const schoolId = resolveSchoolId();
+    const { fileUrl, validUrl } = await assessmentsApi.uploadImage(schoolId, file);
+    return { fileUrl, validUrl };
   },
 }));

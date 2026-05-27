@@ -99,6 +99,7 @@ export const router = createBrowserRouter([
 
               // Homework
               { path: 'homework', element: lazyPage(() => import('@/modules/homework/pages/HomeworkListPage')) },
+              { path: 'homework/:id', element: lazyPage(() => import('@/modules/homework/pages/HomeworkDetailPage')) },
 
               // Assessments & Marks
               {

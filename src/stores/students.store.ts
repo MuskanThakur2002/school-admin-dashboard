@@ -37,6 +37,9 @@ interface StudentsState {
   updateStudent: (id: string, dto: UpdateStudentDto) => Promise<Student>;
   deleteStudent: (id: string) => Promise<void>;
   uploadAvatar: (id: string, file: File) => Promise<{ student: Student; validUrl: string }>;
+  // Upload an avatar that isn't attached to a student yet (used by the create
+  // flow). Returns the S3 key (`fileUrl`) to pass as `avatarUrl` on create.
+  uploadAvatarFile: (file: File) => Promise<{ fileUrl: string; validUrl: string }>;
 }
 
 export const useStudentsStore = create<StudentsState>((set) => ({
@@ -93,10 +96,20 @@ export const useStudentsStore = create<StudentsState>((set) => ({
   uploadAvatar: async (id, file) => {
     const schoolId = resolveSchoolId();
     const { student, validUrl } = await studentsApi.uploadStudentAvatar(schoolId, id, file);
+    // Cache the signed `validUrl` as avatarUrl so the list/profile render the
+    // new photo immediately; a later GET re-signs the key into a fresh URL.
     set((s) => ({
-      students: s.students.map((stu) => (stu.id === id ? { ...stu, ...student } : stu)),
+      students: s.students.map((stu) =>
+        stu.id === id ? { ...stu, ...student, avatarUrl: validUrl } : stu,
+      ),
     }));
     return { student, validUrl };
+  },
+
+  uploadAvatarFile: async (file) => {
+    const schoolId = resolveSchoolId();
+    const { fileUrl, validUrl } = await studentsApi.uploadAvatar(schoolId, file);
+    return { fileUrl, validUrl };
   },
 }));
 

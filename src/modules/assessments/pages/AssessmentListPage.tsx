@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, ClipboardList, Pencil, Trash2, Search, X, ListChecks } from 'lucide-react';
+import { Plus, ClipboardList, Pencil, Trash2, Search, X, ListChecks, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -15,7 +15,6 @@ import type { ClassGroup } from '@/types/academic.types';
 
 interface FormState {
   name: string;
-  type: string;
   academicYearId: string;
   classMasterId: string;
   classSectionId: string;
@@ -23,12 +22,12 @@ interface FormState {
   endDate: string;
   maxMarks: string;
   description: string;
+  imageUrl: string;
 }
 
 function emptyForm(activeYearId: string): FormState {
   return {
     name: '',
-    type: '',
     academicYearId: activeYearId,
     classMasterId: '',
     classSectionId: '',
@@ -36,6 +35,7 @@ function emptyForm(activeYearId: string): FormState {
     endDate: '',
     maxMarks: '100',
     description: '',
+    imageUrl: '',
   };
 }
 
@@ -88,9 +88,7 @@ export default function AssessmentListPage() {
   const filteredData = useMemo(() => {
     if (!search.trim()) return items;
     const q = search.toLowerCase();
-    return items.filter(
-      (a) => a.name.toLowerCase().includes(q) || a.type.toLowerCase().includes(q),
-    );
+    return items.filter((a) => a.name.toLowerCase().includes(q));
   }, [items, search]);
 
   const handleDelete = async (e: React.MouseEvent, a: Assessment) => {
@@ -144,7 +142,7 @@ export default function AssessmentListPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name or type..."
+            placeholder="Name..."
             className="w-full bg-[var(--card-bg-hover)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
           />
           {search && (
@@ -160,8 +158,8 @@ export default function AssessmentListPage() {
 
       {/* Table */}
       <div className="bg-[var(--card-bg)] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1.4fr_1fr_0.6fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
-          {['Name', 'Type', 'Academic Year', 'Max Marks', ''].map((h) => (
+        <div className="grid grid-cols-[2fr_1.4fr_1fr_0.6fr] gap-4 px-6 py-3.5 bg-[var(--card-bg-hover)]">
+          {['Name', 'Academic Year', 'Max Marks', ''].map((h) => (
             <span
               key={h}
               className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]"
@@ -183,14 +181,26 @@ export default function AssessmentListPage() {
               key={a.id}
               onClick={() => setEditing(a)}
               className={cn(
-                'grid grid-cols-[2fr_1fr_1.4fr_1fr_0.6fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
+                'grid grid-cols-[2fr_1.4fr_1fr_0.6fr] gap-4 items-center px-6 py-4 transition-colors hover:bg-[var(--card-bg-hover)] cursor-pointer',
                 idx < filteredData.length - 1 && 'border-b border-[var(--border-subtle)]',
               )}
             >
-              <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">
-                {a.name}
-              </p>
-              <span className="text-[0.75rem] text-[var(--text-secondary)] truncate">{a.type}</span>
+              <div className="flex items-center gap-3 min-w-0">
+                {a.validImageUrl ? (
+                  <img
+                    src={a.validImageUrl}
+                    alt=""
+                    className="w-9 h-9 rounded-lg object-cover flex-shrink-0 bg-[var(--card-bg-hover)]"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-[var(--card-bg-hover)] text-[var(--text-ghost)]">
+                    <ImageIcon className="w-4 h-4" strokeWidth={1.75} />
+                  </div>
+                )}
+                <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">
+                  {a.name}
+                </p>
+              </div>
               <span className="text-[0.75rem] text-[var(--text-secondary)] truncate">
                 {yearLabel(a.academicYearId)}
               </span>
@@ -256,7 +266,6 @@ export default function AssessmentListPage() {
           if (!form.academicYearId) throw new Error('Academic year is required');
           await createAssessment({
             name: form.name,
-            type: form.type,
             academicYearId: form.academicYearId,
             classMasterId: form.classMasterId,
             classSectionId: form.classSectionId,
@@ -264,6 +273,7 @@ export default function AssessmentListPage() {
             endDate: form.endDate,
             maxMarks: Number(form.maxMarks),
             description: form.description.trim() || undefined,
+            imageUrl: form.imageUrl || undefined,
           });
           showToast({ type: 'success', title: 'Exam added', message: form.name });
         }}
@@ -286,7 +296,6 @@ export default function AssessmentListPage() {
           if (!editing) return;
           await updateAssessment(editing.id, {
             name: form.name,
-            type: form.type,
             academicYearId: form.academicYearId,
             classMasterId: form.classMasterId,
             classSectionId: form.classSectionId,
@@ -294,6 +303,7 @@ export default function AssessmentListPage() {
             endDate: form.endDate,
             maxMarks: Number(form.maxMarks),
             description: form.description.trim() || undefined,
+            imageUrl: form.imageUrl || undefined,
           });
           showToast({ type: 'success', title: 'Exam updated', message: form.name });
         }}
@@ -332,23 +342,28 @@ function AssessmentFormModal({
 }: AssessmentFormModalProps) {
   const [form, setForm] = useState<FormState>(emptyForm(defaultYearId));
   const [saving, setSaving] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const uploadImage = useAssessmentStore((s) => s.uploadImage);
 
   useEffect(() => {
     if (!open) return;
     if (initial) {
       setForm({
-        name: initial.name,
-        type: initial.type,
+        name: initial.name ?? '',
         academicYearId: initial.academicYearId,
         classMasterId: initial.classMasterId ?? '',
         classSectionId: initial.classSectionId ?? '',
-        startDate: initial.startDate ?? '',
-        endDate: initial.endDate ?? '',
+        startDate: initial.startDate?.slice(0, 10) ?? '',
+        endDate: initial.endDate?.slice(0, 10) ?? '',
         maxMarks: String(initial.maxMarks),
         description: initial.description ?? '',
+        imageUrl: initial.imageUrl ?? '',
       });
+      setImagePreview(initial.validImageUrl ?? null);
     } else {
       setForm(emptyForm(defaultYearId));
+      setImagePreview(null);
     }
   }, [open, initial, defaultYearId]);
 
@@ -366,8 +381,7 @@ function AssessmentFormModal({
   }, [classes, form.classMasterId]);
 
   const canSubmit =
-    form.name.trim() &&
-    form.type.trim() &&
+    form.name?.trim() &&
     form.academicYearId &&
     form.classMasterId &&
     form.classSectionId &&
@@ -387,6 +401,27 @@ function AssessmentFormModal({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const { fileUrl, validUrl } = await uploadImage(file);
+      update('imageUrl', fileUrl);
+      setImagePreview(validUrl);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    update('imageUrl', '');
+    setImagePreview(null);
   };
 
   return (
@@ -417,12 +452,6 @@ function AssessmentFormModal({
           placeholder="e.g., Term 1 — Midterm"
         />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Type *"
-            value={form.type}
-            onChange={(e) => update('type', e.target.value)}
-            placeholder="e.g., Midterm, Final, Quiz"
-          />
           <Input
             label="Max marks *"
             type="number"
@@ -483,6 +512,41 @@ function AssessmentFormModal({
             placeholder="Optional notes about the exam..."
             className="w-full bg-[var(--card-bg-hover)] rounded-xl px-4 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.15)] transition-all resize-y"
           />
+        </div>
+        <div className="space-y-1.5">
+          <span className="block text-[0.75rem] font-semibold text-[var(--text-secondary)] tracking-wide">
+            Exam image
+          </span>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden bg-[var(--card-bg-hover)] flex items-center justify-center flex-shrink-0">
+              {imagePreview ? (
+                <img src={imagePreview} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon className="w-5 h-5 text-[var(--text-ghost)]" strokeWidth={1.75} />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] bg-[var(--card-bg-hover)] text-[var(--text-primary)] text-[0.8125rem] font-semibold cursor-pointer hover:brightness-95 transition-all">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  disabled={uploadingImage}
+                  className="hidden"
+                />
+                {uploadingImage ? 'Uploading…' : imagePreview ? 'Replace' : 'Upload image'}
+              </label>
+              {imagePreview && !uploadingImage && (
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className="px-3.5 py-2 rounded-[10px] text-[0.8125rem] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </Modal>

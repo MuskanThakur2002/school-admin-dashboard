@@ -89,7 +89,7 @@ export default function MarksEntryPage() {
   }, [initialAssessmentId, initialEnrollmentId]);
 
   const assessmentOptions = useMemo(
-    () => assessments.map((a) => ({ label: `${a.name} (${a.type})`, value: a.id })),
+    () => assessments.map((a) => ({ label: a.name, value: a.id })),
     [assessments],
   );
 
