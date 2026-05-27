@@ -2,13 +2,16 @@ export interface Assessment {
   id: string;
   schoolId: string;
   name: string;
-  type: string;
   academicYearId: string;
   classMasterId?: string;
   classSectionId?: string | null;
   startDate?: string;
   endDate?: string;
   description?: string | null;
+  // Stored as the private S3 key; the API also returns a temporary signed
+  // `validImageUrl` for rendering. Send the key as `imageUrl` on create/update.
+  imageUrl?: string | null;
+  validImageUrl?: string | null;
   // API returns maxMarks as a string on GET but accepts a number on POST/PUT.
   maxMarks: string | number;
   createdAt: string;
@@ -18,7 +21,6 @@ export interface Assessment {
 export interface CreateAssessmentDto {
   schoolId: string;
   name: string;
-  type: string;
   academicYearId: string;
   classMasterId: string;
   classSectionId: string;
@@ -26,6 +28,7 @@ export interface CreateAssessmentDto {
   endDate: string;
   maxMarks: number;
   description?: string;
+  imageUrl?: string;
 }
 
 export type UpdateAssessmentDto = Partial<CreateAssessmentDto>;

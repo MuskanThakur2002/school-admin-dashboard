@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Download, Search, X, Users, GraduationCap, UserCheck, Trash2,
+  Plus, Download, Search, X, Users, GraduationCap, UserCheck, Trash2, Camera, Loader2,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
@@ -30,6 +30,37 @@ const statusStyle: Record<string, { dot: string; text: string; bg: string }> = {
 function statusBadge(status: string) {
   const key = status?.toLowerCase();
   return statusStyle[key] ?? { dot: 'bg-slate-400', text: 'text-slate-600', bg: 'bg-slate-50' };
+}
+
+function initialsOf(name: string) {
+  return (
+    (name || '?')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || '?'
+  );
+}
+
+// List avatar: shows the student photo when present, falling back to initials
+// on a missing or broken URL (e.g. an expired signed link).
+function RowAvatar({ src, name }: { src: string | null; name: string }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center overflow-hidden shrink-0">
+      {src && !broken ? (
+        <img
+          src={src}
+          alt={name}
+          className="w-full h-full object-cover"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <span className="text-white text-[0.625rem] font-bold">{initialsOf(name)}</span>
+      )}
+    </div>
+  );
 }
 
 export default function StudentListPage() {
@@ -212,12 +243,6 @@ export default function StudentListPage() {
 
         {!loading && filteredData.map((student, idx) => {
           const st = statusBadge(student.status);
-          const initials = (student.name || '?')
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map((p) => p[0]?.toUpperCase() ?? '')
-            .join('') || '?';
           return (
             <div
               key={student.id}
@@ -230,9 +255,7 @@ export default function StudentListPage() {
               <span className="text-[0.75rem] font-bold text-[#002c98] tracking-wide">{student.admissionNumber}</span>
 
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center shrink-0">
-                  <span className="text-white text-[0.625rem] font-bold">{initials}</span>
-                </div>
+                <RowAvatar src={student.avatarUrl} name={student.name} />
                 <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)] truncate">{student.name}</p>
               </div>
 
@@ -294,6 +317,7 @@ interface AddStudentModalProps {
 
 function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
   const createStudent = useStudentsStore((s) => s.createStudent);
+  const uploadAvatarFile = useStudentsStore((s) => s.uploadAvatarFile);
   const createEnrollment = useEnrollmentStore((s) => s.createEnrollment);
   const years = useAcademicStore((s) => s.years);
   const classes = useAcademicStore((s) => s.classes);
@@ -313,6 +337,11 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     rollNumber: '',
   });
   const [saving, setSaving] = useState(false);
+  // Avatar is chosen here but only uploaded on submit (so a cancel uploads
+  // nothing). `avatarPreview` is a local object URL for the chosen file.
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -320,12 +349,33 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     if (classes.length === 0) fetchClasses();
   }, [open, years.length, classes.length, fetchYears, fetchClasses]);
 
-  const reset = () =>
+  const clearAvatar = () => {
+    setAvatarPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setAvatarFile(null);
+  };
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  };
+
+  const reset = () => {
     setForm({
       name: '', admissionNumber: '', dateOfBirth: '',
       gender: 'Male', parentId: '', status: 'active',
       classSectionId: '', rollNumber: '',
     });
+    clearAvatar();
+  };
 
   const handleClose = (next: boolean) => {
     if (!next) reset();
@@ -348,6 +398,13 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
     if (!canSubmit || saving) return;
     setSaving(true);
     try {
+      // Upload the photo first (if any) so the student is created with its
+      // avatar key set. A failure here aborts before creating the student.
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        const { fileUrl } = await uploadAvatarFile(avatarFile);
+        avatarUrl = fileUrl;
+      }
       const dto: CreateStudentDto = {
         name: form.name.trim(),
         admissionNumber: form.admissionNumber.trim(),
@@ -355,6 +412,7 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
         gender: form.gender,
         parentId: form.parentId,
         status: form.status.trim(),
+        ...(avatarUrl ? { avatarUrl } : {}),
       };
       const student = await createStudent(dto);
       showToast({ type: 'success', title: 'Student added', message: form.name.trim() });
@@ -419,6 +477,62 @@ function AddStudentModal({ open, onOpenChange }: AddStudentModalProps) {
       }
     >
       <div className="space-y-5">
+        <div className="flex items-center gap-4">
+          <div className="relative w-16 h-16 shrink-0">
+            <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#002c98] to-[#3b6cf5] flex items-center justify-center overflow-hidden shadow-[0_4px_12px_rgba(0,44,152,0.25)]">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="Student photo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="font-display text-[1.25rem] font-extrabold text-white">
+                  {form.name.trim() ? initialsOf(form.name) : <Camera className="w-5 h-5" strokeWidth={2} />}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={saving}
+              title="Add photo"
+              aria-label="Add photo"
+              className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-white text-[#002c98] shadow-[0_2px_6px_rgba(0,0,0,0.18)] flex items-center justify-center hover:bg-blue-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving && avatarFile
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Camera className="w-3.5 h-3.5" strokeWidth={2} />}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarSelect}
+              className="hidden"
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[0.8125rem] font-semibold text-[var(--text-primary)]">Student photo <span className="font-medium text-[var(--text-muted)]">(optional)</span></p>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={saving}
+                className="text-[0.75rem] font-semibold text-[#002c98] hover:underline disabled:opacity-60"
+              >
+                {avatarPreview ? 'Change photo' : 'Add photo'}
+              </button>
+              {avatarPreview && (
+                <button
+                  type="button"
+                  onClick={clearAvatar}
+                  disabled={saving}
+                  className="text-[0.75rem] font-semibold text-[var(--text-muted)] hover:text-red-600 disabled:opacity-60"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Full name *"
