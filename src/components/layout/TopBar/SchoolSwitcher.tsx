@@ -65,10 +65,10 @@ export function SchoolSwitcher() {
         title={active ? `Viewing ${active.name}` : 'Select a school to manage'}
       >
         <Building2 className="w-4 h-4" strokeWidth={2} />
-        <span className="max-w-[160px] truncate">
+        <span className="hidden md:inline max-w-[160px] truncate">
           {active ? active.name : 'All Schools'}
         </span>
-        <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+        <ChevronDown className="hidden md:block w-3.5 h-3.5 opacity-60" />
       </button>
 
       {open && (
