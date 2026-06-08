@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Building2, User, Globe, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal/Modal';
 import { Input } from '@/components/ui/Input/Input';
@@ -20,11 +20,9 @@ const steps = [
   { id: 4, label: 'Review', icon: CheckCircle2 },
 ];
 
-const stateOptions = [
-  'Andhra Pradesh', 'Bihar', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Punjab',
-  'Rajasthan', 'Tamil Nadu', 'Telangana', 'UP', 'West Bengal',
-].map((s) => ({ label: s, value: s }));
+// State/city data comes from `country-state-city`, dynamically imported
+// only when the wizard opens (see component) to keep it out of the bundle.
+type CscModule = typeof import('country-state-city');
 
 const boardOptions = [
   { label: 'CBSE', value: 'CBSE' },
@@ -70,6 +68,25 @@ export function OnboardingWizard({ open, onOpenChange, onSubmit }: OnboardingWiz
   const [domain, setDomain] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Lazy-load the (large) country-state-city dataset only once the wizard
+  // is opened, so it never weighs down the initial bundle.
+  const [csc, setCsc] = useState<CscModule | null>(null);
+  useEffect(() => {
+    if (open && !csc) import('country-state-city').then(setCsc);
+  }, [open, csc]);
+
+  const inStates = useMemo(() => csc?.State.getStatesOfCountry('IN') ?? [], [csc]);
+  const stateOptions = useMemo(
+    () => inStates.map((s) => ({ label: s.name, value: s.name })),
+    [inStates],
+  );
+  const cityOptions = useMemo(() => {
+    const code = inStates.find((s) => s.name === state)?.isoCode;
+    return code && csc
+      ? csc.City.getCitiesOfState('IN', code).map((c) => ({ label: c.name, value: c.name }))
+      : [];
+  }, [csc, inStates, state]);
 
   const resetForm = () => {
     setStep(1);
@@ -185,8 +202,8 @@ export function OnboardingWizard({ open, onOpenChange, onSubmit }: OnboardingWiz
         <div className="space-y-4">
           <Input label="School Name" placeholder="e.g. Delhi Public School — Noida" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
           <div className="grid grid-cols-2 gap-4">
-            <Select label="State" options={stateOptions} value={state} onChange={(e) => setState(e.target.value)} placeholder="Select state" error={errors.state} />
-            <Input label="City" placeholder="e.g. Noida" value={city} onChange={(e) => setCity(e.target.value)} error={errors.city} />
+            <Select label="State" options={stateOptions} value={state} onChange={(e) => { setState(e.target.value); setCity(''); }} placeholder="Select state" error={errors.state} />
+            <Select label="City" options={cityOptions} value={city} onChange={(e) => setCity(e.target.value)} placeholder={state ? 'Select city' : 'Select state first'} disabled={!state} error={errors.city} className="disabled:opacity-60 disabled:cursor-not-allowed" />
           </div>
           <Select label="Board / Affiliation" options={boardOptions} value={board} onChange={(e) => setBoard(e.target.value)} />
         </div>
