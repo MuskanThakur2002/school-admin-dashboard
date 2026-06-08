@@ -141,8 +141,15 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
       });
 
       // Make sure enrollments are loaded so we can hydrate names/classes.
+      // The shared enrollment cache may hold only a filtered subset (e.g. a
+      // single class-section loaded by the Attendance page). If it doesn't
+      // cover every ledger entry, those rows come back with blank student
+      // names/admission numbers — which makes the search match nothing.
+      // Refetch the full year list whenever coverage is incomplete.
       let enrollments = useEnrollmentStore.getState().enrollments;
-      if (enrollments.length === 0) {
+      const covered = new Set(enrollments.map((e) => e.id));
+      const haveAll = res.data.every((e) => covered.has(e.studentEnrollmentId));
+      if (!haveAll) {
         enrollments = await useEnrollmentStore.getState().fetchEnrollments({
           ...(academicYearId ? { academicYearId } : {}),
         });

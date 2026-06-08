@@ -277,10 +277,10 @@ function EditTeacherModal({ open, onOpenChange, teacher, onSave, onError }: Edit
           <div>
             <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} />
+              <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} />
               <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
-              <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} />
-              <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} />
+              <Input label="Phone" inputMode="numeric" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value.replace(/\D/g, '').slice(0, 10))} />
+              <Input label="WhatsApp" inputMode="numeric" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value.replace(/\D/g, '').slice(0, 10))} />
               <div className="md:col-span-2">
                 <Input label="Address" value={form.address} onChange={(e) => update('address', e.target.value)} />
               </div>
@@ -290,7 +290,7 @@ function EditTeacherModal({ open, onOpenChange, teacher, onSave, onError }: Edit
           <div>
             <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Employment</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Employee ID *" value={form.employeeId} onChange={(e) => update('employeeId', e.target.value)} />
+              <Input label="Employee ID *" value={form.employeeId} onChange={(e) => update('employeeId', e.target.value.toUpperCase())} />
               <Input label="Hire date *" type="date" value={form.hireDate} onChange={(e) => update('hireDate', e.target.value)} />
             </div>
           </div>

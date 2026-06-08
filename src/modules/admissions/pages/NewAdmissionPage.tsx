@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Check, User, Users, MapPin, FileText,
-  Plus, UserPlus,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input/Input';
@@ -11,8 +10,6 @@ import { Button } from '@/components/ui/Button/Button';
 import { useUIStore } from '@/stores/ui.store';
 import { useAdmissionsStore } from '@/stores/admissions.store';
 import { useAcademicStore } from '@/stores/academic.store';
-import { useParentStore } from '@/stores/parent.store';
-import { useSettingsStore } from '@/stores/settings.store';
 import { genderOptions } from '@/utils/constants';
 import { useClassOptions } from '@/hooks/useClassOptions';
 
@@ -36,12 +33,6 @@ export default function NewAdmissionPage() {
   const classOptions = useClassOptions();
   const showToast = useUIStore((s) => s.showToast);
 
-  // Parent picker / inline create
-  const parents = useParentStore((s) => s.parents);
-  const fetchParents = useParentStore((s) => s.fetchParents);
-  const createParent = useParentStore((s) => s.createParent);
-  const ensureParentRole = useSettingsStore((s) => s.ensureParentRole);
-
   // Step navigation
   const [currentStep, setCurrentStep] = useState<StepId>('student');
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
@@ -52,123 +43,43 @@ export default function NewAdmissionPage() {
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<Gender>('male');
   const [classApplied, setClassApplied] = useState('');
-  // Parent fields — sent to the backend as text on the Application.
-  // Filled either by picking an existing Parent or via the inline create form.
-  const [parentName, setParentName] = useState('');
-  const [parentPhone, setParentPhone] = useState('');
-  const [parentEmail, setParentEmail] = useState('');
+  // Guardian fields — at least one parent (name + phone) is required; the
+  // other parent and the email are optional. Mapped onto the Application's
+  // single parentName/phoneNumber/email on submit.
+  const [fatherName, setFatherName] = useState('');
+  const [fatherPhone, setFatherPhone] = useState('');
+  const [motherName, setMotherName] = useState('');
+  const [motherPhone, setMotherPhone] = useState('');
+  const [guardianEmail, setGuardianEmail] = useState('');
   const [address, setAddress] = useState('');
-
-  // Parent mode: pick from list, or create inline.
-  const [parentMode, setParentMode] = useState<'pick' | 'create'>('pick');
-  const [selectedParentId, setSelectedParentId] = useState('');
-  const [newParentPassword, setNewParentPassword] = useState(() =>
-    Math.random().toString(36).slice(2, 12),
-  );
-  const [newParentAnnualIncome, setNewParentAnnualIncome] = useState('');
-  const [newFatherName, setNewFatherName] = useState('');
-  const [newMotherName, setNewMotherName] = useState('');
-  const [creatingParent, setCreatingParent] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (academicYears.length === 0) fetchYears();
-    if (parents.length === 0) fetchParents(1, 100);
-  }, [academicYears.length, parents.length, fetchYears, fetchParents]);
-
-  // ─── Parent options + role lookup ────────────────────────────
-  const parentOptions = useMemo(
-    () => [
-      { label: parents.length === 0 ? 'No parents yet — create one below' : 'Select parent...', value: '' },
-      ...parents.map((p) => ({
-        label: p.user?.name ? `${p.user.name}${p.user.email ? ` — ${p.user.email}` : ''}` : p.id,
-        value: p.id,
-      })),
-    ],
-    [parents],
-  );
-  const handlePickParent = (id: string) => {
-    setSelectedParentId(id);
-    const p = parents.find((x) => x.id === id);
-    if (p) {
-      setParentName(p.user?.name ?? '');
-      setParentEmail(p.user?.email ?? '');
-      setParentPhone(p.user?.phoneNumber ?? '');
-    } else {
-      setParentName('');
-      setParentEmail('');
-      setParentPhone('');
-    }
-  };
-
-  const handleCreateParent = async () => {
-    if (!parentName.trim() || !newParentPassword.trim()) {
-      showToast({ type: 'error', title: 'Missing fields', message: 'Name and password are required.' });
-      return;
-    }
-    const incomeStr = newParentAnnualIncome.trim();
-    let incomeNum = 0;
-    if (incomeStr !== '') {
-      incomeNum = Number(incomeStr);
-      if (!Number.isFinite(incomeNum) || incomeNum < 0) {
-        showToast({ type: 'error', title: 'Invalid annual income', message: 'Annual income must be a non-negative number.' });
-        return;
-      }
-    }
-    setCreatingParent(true);
-    try {
-      const parentRole = await ensureParentRole();
-      const created = await createParent({
-        user: {
-          name: parentName.trim(),
-          email: parentEmail.trim(),
-          password: newParentPassword,
-          phoneNumber: parentPhone.trim() || undefined,
-          roleId: parentRole.id,
-          isActive: true,
-        },
-        parent: {
-          annualIncome: incomeNum,
-          fatherName: newFatherName.trim() || undefined,
-          motherName: newMotherName.trim() || undefined,
-        },
-      });
-      showToast({
-        type: 'success',
-        title: 'Guardian created',
-        message: `Initial password: ${newParentPassword} (share with the guardian).`,
-      });
-      // Switch to pick mode with the new parent selected.
-      setParentMode('pick');
-      setSelectedParentId(created.id);
-      setNewParentPassword(Math.random().toString(36).slice(2, 12));
-      setNewParentAnnualIncome('');
-      setNewFatherName('');
-      setNewMotherName('');
-    } catch (err) {
-      showToast({ type: 'error', title: 'Failed to create guardian', message: (err as Error).message });
-    } finally {
-      setCreatingParent(false);
-    }
-  };
+  }, [academicYears.length, fetchYears]);
 
   // ─── Validation per step ─────────────────────────────────────
   const validateStep = (step: StepId): string | null => {
     if (step === 'student') {
       if (!firstName.trim()) return 'First name is required';
-      if (!lastName.trim()) return 'Last name is required';
       if (!dateOfBirth) return 'Date of birth is required';
       if (!classApplied.trim()) return 'Class applied is required';
     }
     if (step === 'parent') {
-      if (parentMode === 'pick') {
-        if (!selectedParentId) return 'Please pick a guardian or switch to "Create new"';
+      const fatherComplete = !!fatherName.trim() && !!fatherPhone.trim();
+      const motherComplete = !!motherName.trim() && !!motherPhone.trim();
+      // Each parent must be all-or-nothing (a name needs a phone and vice versa).
+      if (fatherName.trim() && !fatherPhone.trim()) return "Father's phone number is required";
+      if (fatherPhone.trim() && !fatherName.trim()) return "Father's name is required";
+      if (motherName.trim() && !motherPhone.trim()) return "Mother's phone number is required";
+      if (motherPhone.trim() && !motherName.trim()) return "Mother's name is required";
+      // At least one parent must be fully provided.
+      if (!fatherComplete && !motherComplete) {
+        return "Enter at least one parent's name and phone number";
       }
-      if (parentMode === 'create') {
-        if (!parentName.trim()) return 'Guardian name is required';
-        if (parentEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) return 'Guardian email is not valid';
-        return 'Please click "Create guardian" before continuing';
+      if (guardianEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guardianEmail.trim())) {
+        return 'Guardian email is not valid';
       }
     }
     if (step === 'address') {
@@ -208,6 +119,13 @@ export default function NewAdmissionPage() {
       return;
     }
 
+    // Map both parents onto the Application's single contact fields. The
+    // primary (whichever is fully filled, father first) drives the phone.
+    const father = fatherName.trim();
+    const mother = motherName.trim();
+    const combinedName = father && mother ? `${father} & ${mother}` : father || mother;
+    const primaryPhone = (father ? fatherPhone.trim() : '') || motherPhone.trim();
+
     setSubmitting(true);
     try {
       await createApplication({
@@ -216,9 +134,9 @@ export default function NewAdmissionPage() {
         dateOfBirth,
         gender,
         classApplied,
-        parentName: parentName.trim(),
-        parentPhone: parentPhone.trim(),
-        parentEmail: parentEmail.trim() || undefined,
+        parentName: combinedName,
+        parentPhone: primaryPhone,
+        parentEmail: guardianEmail.trim() || undefined,
         address: address.trim() || undefined,
       }, activeYear.id);
       showToast({
@@ -313,7 +231,7 @@ export default function NewAdmissionPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Input label="First Name *" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="e.g. Aarav" />
-              <Input label="Last Name *" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="e.g. Mehta" />
+              <Input label="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="e.g. Mehta" />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <Input label="Date of Birth *" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
@@ -334,121 +252,35 @@ export default function NewAdmissionPage() {
           </div>
         )}
 
-        {/* ─── Step 2: Parent ─── */}
+        {/* ─── Step 2: Guardian ─── */}
         {currentStep === 'parent' && (
           <div className="space-y-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-[1rem] font-bold text-[var(--text-primary)] mb-1">Guardian</h2>
-                <p className="text-[0.75rem] text-[var(--text-muted)]">
-                  Pick an existing guardian, or create a new one. The student will be linked to this guardian on approval.
-                </p>
-              </div>
-              {parentMode === 'pick' ? (
-                <button
-                  onClick={() => {
-                    setParentMode('create');
-                    setSelectedParentId('');
-                    setParentName('');
-                    setParentEmail('');
-                    setParentPhone('');
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[0.75rem] font-semibold text-[#002c98] bg-blue-50 hover:bg-blue-100 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Create new
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    setParentMode('pick');
-                    setParentName('');
-                    setParentEmail('');
-                    setParentPhone('');
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[0.75rem] font-semibold text-[var(--text-tertiary)] bg-[var(--card-bg-hover)] hover:bg-[var(--border-subtle)] transition-colors"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Pick existing
-                </button>
-              )}
+            <div>
+              <h2 className="text-[1rem] font-bold text-[var(--text-primary)] mb-1">Guardian Details</h2>
+              <p className="text-[0.75rem] text-[var(--text-muted)]">
+                Enter the father's and/or mother's details. At least one parent's name and phone number is required.
+              </p>
             </div>
 
-            {parentMode === 'pick' && (
-              <>
-                <Select
-                  label="Existing guardian *"
-                  options={parentOptions}
-                  value={selectedParentId}
-                  onChange={(e) => handlePickParent(e.target.value)}
-                />
-                {selectedParentId && (
-                  <div className="rounded-xl bg-emerald-50 p-4">
-                    <p className="text-[0.6875rem] font-semibold text-emerald-800 uppercase tracking-[0.06em] mb-2">Linked guardian</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-[0.625rem] text-emerald-700 uppercase mb-0.5">Name</p>
-                        <p className="text-[0.8125rem] font-semibold text-emerald-900">{parentName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[0.625rem] text-emerald-700 uppercase mb-0.5">Phone</p>
-                        <p className="text-[0.8125rem] font-semibold text-emerald-900">{parentPhone || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[0.625rem] text-emerald-700 uppercase mb-0.5">Email</p>
-                        <p className="text-[0.8125rem] font-semibold text-emerald-900 truncate">{parentEmail || '—'}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {parents.length === 0 && (
-                  <div className="rounded-xl bg-amber-50 p-3">
-                    <p className="text-[0.6875rem] text-amber-700 leading-relaxed">
-                      No guardians in the system yet. Click <strong>+ Create new</strong> above to add one.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-
-            {parentMode === 'create' && (
-              <div className="rounded-xl bg-[var(--card-bg-hover)] p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-[#002c98]" />
-                  <p className="text-[0.8125rem] font-bold text-[var(--text-primary)]">New guardian details</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Full Name *" value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="e.g. Rajesh Mehta" />
-                  <Input label="Phone" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="e.g. 9876543210" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Email" type="email" value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} placeholder="e.g. guardian@email.com" />
-                  <Input
-                    label="Initial password *"
-                    value={newParentPassword}
-                    onChange={(e) => setNewParentPassword(e.target.value)}
-                    placeholder="Auto-suggested"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Father name" value={newFatherName} onChange={(e) => setNewFatherName(e.target.value)} placeholder="e.g. Rajesh Mehta" />
-                  <Input label="Mother name" value={newMotherName} onChange={(e) => setNewMotherName(e.target.value)} placeholder="e.g. Meera Mehta" />
-                </div>
-                <Input
-                  label="Annual income (INR)"
-                  type="number"
-                  min={0}
-                  value={newParentAnnualIncome}
-                  onChange={(e) => setNewParentAnnualIncome(e.target.value)}
-                  placeholder="100000"
-                />
-                <Button
-                  onClick={handleCreateParent}
-                  loading={creatingParent}
-                  className="w-full"
-                >
-                  <UserPlus className="w-4 h-4" /> Create guardian
-                </Button>
+            {/* Father */}
+            <div className="rounded-xl bg-[var(--card-bg-hover)] p-5 space-y-4">
+              <p className="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.06em]">Father</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Father's Name" value={fatherName} onChange={(e) => setFatherName(e.target.value.replace(/[^a-zA-Z\s]/g, ''))} placeholder="e.g. Rajesh Mehta" />
+                <Input label="Father's Phone" inputMode="numeric" value={fatherPhone} onChange={(e) => setFatherPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="e.g. 9876543210" />
               </div>
-            )}
+            </div>
+
+            {/* Mother */}
+            <div className="rounded-xl bg-[var(--card-bg-hover)] p-5 space-y-4">
+              <p className="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.06em]">Mother</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Mother's Name" value={motherName} onChange={(e) => setMotherName(e.target.value.replace(/[^a-zA-Z\s]/g, ''))} placeholder="e.g. Meera Mehta" />
+                <Input label="Mother's Phone" inputMode="numeric" value={motherPhone} onChange={(e) => setMotherPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="e.g. 9876543210" />
+              </div>
+            </div>
+
+            <Input label="Email (optional)" type="email" value={guardianEmail} onChange={(e) => setGuardianEmail(e.target.value)} placeholder="e.g. guardian@email.com" />
           </div>
         )}
 
@@ -488,16 +320,18 @@ export default function NewAdmissionPage() {
                 <SummaryField label="Full Name" value={`${firstName} ${lastName}`} />
                 <SummaryField label="Date of Birth" value={dateOfBirth} />
                 <SummaryField label="Gender" value={gender} />
-                <SummaryField label="Class Applied" value={`Class ${classApplied}`} />
+                <SummaryField label="Class Applied" value={classApplied} />
               </div>
             </div>
 
             <div className="rounded-xl bg-[var(--card-bg-hover)] p-5">
-              <p className="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.06em] mb-3">Parent</p>
-              <div className="grid grid-cols-3 gap-4">
-                <SummaryField label="Name" value={parentName} />
-                <SummaryField label="Phone" value={parentPhone} />
-                <SummaryField label="Email" value={parentEmail || '—'} />
+              <p className="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.06em] mb-3">Guardian</p>
+              <div className="grid grid-cols-2 gap-4">
+                <SummaryField label="Father's Name" value={fatherName || '—'} />
+                <SummaryField label="Father's Phone" value={fatherPhone || '—'} />
+                <SummaryField label="Mother's Name" value={motherName || '—'} />
+                <SummaryField label="Mother's Phone" value={motherPhone || '—'} />
+                <SummaryField label="Email" value={guardianEmail || '—'} />
               </div>
             </div>
 

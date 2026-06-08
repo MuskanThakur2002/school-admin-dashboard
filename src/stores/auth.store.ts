@@ -59,7 +59,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   activeSchoolId: initial.activeSchoolId,
 
   login: async (email: string, password: string) => {
-    const { token, refreshToken, user } = await authApi.login({ email, password });
+    const normalizedEmail = email.trim().toLowerCase();
+    const { token, refreshToken, user } = await authApi.login({ email: normalizedEmail, password });
     const activeSchoolId = isSuperAdmin(user) ? null : user.schoolId;
     set({ user, token, refreshToken, isAuthenticated: true, activeSchoolId });
     persist({ user, token, refreshToken, activeSchoolId });

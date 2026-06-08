@@ -48,16 +48,26 @@ export default function UsersPage() {
     return m;
   }, [roles]);
 
+  // Settings → Users lists staff only (admins, principals, admin staff, etc.).
+  // Parents, teachers and students are managed in their own modules.
+  const staffUsers = useMemo(() => {
+    const NON_STAFF_ROLES = new Set(['parent', 'teacher', 'student']);
+    return users.filter((u) => {
+      const roleName = (roleMap.get(u.roleId) ?? u.role?.name ?? '').trim().toLowerCase();
+      return !NON_STAFF_ROLES.has(roleName);
+    });
+  }, [users, roleMap]);
+
   const counts = useMemo(() => {
     let active = 0;
     let inactive = 0;
-    users.forEach((u) => (u.isActive ? active++ : inactive++));
-    return { all: users.length, active, inactive };
-  }, [users]);
+    staffUsers.forEach((u) => (u.isActive ? active++ : inactive++));
+    return { all: staffUsers.length, active, inactive };
+  }, [staffUsers]);
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return users.filter((u) => {
+    return staffUsers.filter((u) => {
       if (statusFilter === 'active' && !u.isActive) return false;
       if (statusFilter === 'inactive' && u.isActive) return false;
       if (!q) return true;
@@ -66,7 +76,7 @@ export default function UsersPage() {
       const phone = u.phoneNumber?.toLowerCase() ?? '';
       return name.includes(q) || email.includes(q) || phone.includes(q);
     });
-  }, [users, search, statusFilter]);
+  }, [staffUsers, search, statusFilter]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -109,7 +119,7 @@ export default function UsersPage() {
 
       {/* Metric strip */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <MetricCard label="Total Users" value={total} icon={UsersIcon} tint="bg-blue-50 text-blue-600" />
+        <MetricCard label="Total Staff" value={counts.all} icon={UsersIcon} tint="bg-blue-50 text-blue-600" />
         <MetricCard label="Active" value={counts.active} icon={UsersIcon} tint="bg-emerald-50 text-emerald-600" />
         <MetricCard label="Inactive" value={counts.inactive} icon={UsersIcon} tint="bg-amber-50 text-amber-600" />
       </div>

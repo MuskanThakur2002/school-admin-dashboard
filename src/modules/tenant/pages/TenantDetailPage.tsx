@@ -15,6 +15,7 @@ import type { Tenant, TenantPlan } from '@/types/tenant.types';
 // ─── Tabs ──────────────────────────────────────────────────────
 
 const tabs = [
+  { id: 'details', label: 'School Details', icon: Building2 },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'plan', label: 'Plan', icon: CreditCard },
   { id: 'access', label: 'Access Control', icon: Shield },
@@ -25,12 +26,14 @@ type TabId = (typeof tabs)[number]['id'];
 // ─── Plan config ───────────────────────────────────────────────
 
 const planMeta: Record<TenantPlan, { label: string; desc: string; price: string; color: string; selectedColor: string }> = {
+  trial: { label: 'Trial', desc: '14-day free trial, all modules', price: 'Free', color: 'border-emerald-200 bg-emerald-50', selectedColor: 'border-emerald-500 bg-emerald-50 shadow-[0_0_0_2px_rgba(16,185,129,0.2)]' },
   starter: { label: 'Starter', desc: 'Up to 500 students, basic modules', price: '₹5,000/mo', color: 'border-slate-200 bg-slate-50', selectedColor: 'border-slate-500 bg-slate-50 shadow-[0_0_0_2px_rgba(100,116,139,0.2)]' },
   growth: { label: 'Growth', desc: 'Up to 2,000 students, all modules', price: '₹12,000/mo', color: 'border-blue-200 bg-blue-50', selectedColor: 'border-blue-500 bg-blue-50 shadow-[0_0_0_2px_rgba(59,130,246,0.2)]' },
   enterprise: { label: 'Enterprise', desc: 'Unlimited students, API access, priority support', price: '₹25,000/mo', color: 'border-violet-200 bg-violet-50', selectedColor: 'border-violet-500 bg-violet-50 shadow-[0_0_0_2px_rgba(139,92,246,0.2)]' },
 };
 
 const planBadgeStyle: Record<TenantPlan, string> = {
+  trial: 'bg-emerald-50 text-emerald-700',
   starter: 'bg-slate-50 text-slate-600',
   growth: 'bg-blue-50 text-blue-700',
   enterprise: 'bg-violet-50 text-violet-700',
@@ -87,7 +90,7 @@ export default function TenantDetailPage() {
   const showToast = useUIStore((s) => s.showToast);
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('branding');
+  const [activeTab, setActiveTab] = useState<TabId>('details');
   const [saving, setSaving] = useState(false);
 
   // Branding form
@@ -261,6 +264,47 @@ export default function TenantDetailPage() {
           </button>
         ))}
       </div>
+
+      {/* ─── SCHOOL DETAILS TAB ────────────────────────────────── */}
+      {activeTab === 'details' && (
+        <div className="space-y-6">
+          <Section title="School Information" description="Core details for this school">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+              {[
+                ['School Name', tenant.name],
+                ['Domain', tenant.domain || '—'],
+                ['Board / Affiliation', tenant.board || '—'],
+                ['City', tenant.city || '—'],
+                ['State', tenant.state || '—'],
+                ['Plan', planMeta[tenant.plan]?.label ?? tenant.plan],
+                ['Status', tenant.status],
+                ['Join Date', tenant.joinDate || '—'],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-[0.6875rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em] mb-0.5">{label}</p>
+                  <p className="text-[0.875rem] text-[var(--text-primary)] font-medium capitalize">{value}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Primary Admin Contact" description="Main point of contact for this school">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+              {[
+                ['Admin Email', tenant.adminEmail || '—'],
+                ['Admin Phone', tenant.adminPhone || '—'],
+                ['Students', tenant.students.toLocaleString('en-IN')],
+                ['Staff', tenant.staff.toLocaleString('en-IN')],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-[0.6875rem] font-medium text-[var(--text-muted)] uppercase tracking-[0.06em] mb-0.5">{label}</p>
+                  <p className="text-[0.875rem] text-[var(--text-primary)] font-medium">{value}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+      )}
 
       {/* ─── BRANDING TAB ──────────────────────────────────────── */}
       {activeTab === 'branding' && (

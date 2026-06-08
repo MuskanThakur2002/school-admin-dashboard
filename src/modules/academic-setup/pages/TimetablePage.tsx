@@ -19,7 +19,6 @@ const days: { id: DayOfWeek; label: string; short: string }[] = [
   { id: 'thursday', label: 'Thursday', short: 'Thu' },
   { id: 'friday', label: 'Friday', short: 'Fri' },
   { id: 'saturday', label: 'Saturday', short: 'Sat' },
-  { id: 'sunday', label: 'Sunday', short: 'Sun' },
 ];
 
 const subjectColors: Record<string, string> = {
@@ -64,6 +63,7 @@ export default function TimetablePage() {
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [extraRows, setExtraRows] = useState<{ start: string; end: string }[]>([]);
+  const [removedStarts, setRemovedStarts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -86,8 +86,9 @@ export default function TimetablePage() {
     for (const p of defaultPeriods) byStart.set(p.start, { start: p.start, end: p.end });
     for (const s of slots) if (!byStart.has(s.startTime)) byStart.set(s.startTime, { start: s.startTime, end: s.endTime });
     for (const r of extraRows) if (!byStart.has(r.start)) byStart.set(r.start, r);
+    for (const start of removedStarts) byStart.delete(start);
     return [...byStart.values()].sort((a, b) => a.start.localeCompare(b.start));
-  }, [defaultPeriods, slots, extraRows]);
+  }, [defaultPeriods, slots, extraRows, removedStarts]);
 
   // Initial fetch
   useEffect(() => {
@@ -111,6 +112,7 @@ export default function TimetablePage() {
     if (!selectedClassId || !selectedSectionId) {
       setSlots([]);
       setExtraRows([]);
+      setRemovedStarts(new Set());
       return;
     }
     setLoading(true);
@@ -118,6 +120,7 @@ export default function TimetablePage() {
       .then((rows) => {
         setSlots(rows);
         setExtraRows([]);
+        setRemovedStarts(new Set());
       })
       .finally(() => setLoading(false));
   }, [selectedClassId, selectedSectionId]);
@@ -135,6 +138,14 @@ export default function TimetablePage() {
   const findSlot = (day: DayOfWeek, start: string) =>
     slots.find((s) => s.day === day && s.startTime === start);
 
+  const sectionLabel = (sectionId: string): string => {
+    for (const c of classes) {
+      const sec = c.sections.find((s) => s.id === sectionId);
+      if (sec) return `${c.name} – ${sec.name}`.trim();
+    }
+    return '';
+  };
+
   const openEditor = (day: DayOfWeek, start: string, end: string) => {
     const existing = findSlot(day, start);
     setEditorDay(day);
@@ -151,6 +162,28 @@ export default function TimetablePage() {
     let start = last ? last.end : '09:00';
     if (periodRows.some((r) => r.start === start)) start = addMinutes(start, 45);
     setExtraRows((prev) => [...prev, { start, end: addMinutes(start, 45) }]);
+  };
+
+  const handleRemovePeriod = async (row: { start: string; end: string }) => {
+    const rowSlots = days
+      .map((d) => findSlot(d.id, row.start))
+      .filter((s): s is TimetableSlot => Boolean(s));
+    if (rowSlots.length > 0) {
+      if (!confirm(`Remove this period (${row.start} – ${row.end})? ${rowSlots.length} assigned slot(s) will be cleared.`)) return;
+      try {
+        for (const s of rowSlots) {
+          await clearTimetableSlot(s.id);
+        }
+        const fresh = await academicApi.getTimetable(selectedSectionId);
+        setSlots(fresh);
+      } catch (err) {
+        showToast({ type: 'error', title: 'Failed', message: (err as Error).message });
+        return;
+      }
+    }
+    setExtraRows((prev) => prev.filter((r) => r.start !== row.start));
+    setRemovedStarts((prev) => new Set(prev).add(row.start));
+    showToast({ type: 'info', title: 'Period removed' });
   };
 
   const handleSave = async () => {
@@ -182,6 +215,25 @@ export default function TimetablePage() {
     }
     setSubmitting(true);
     try {
+      // Block double-booking the same teacher across classes/sections at the same time.
+      const clash = await academicApi.findTeacherClash({
+        teacherId: formTeacherId,
+        academicYearId: activeYear.id,
+        day: editorDay,
+        startTime: editorStart,
+        endTime: editorEnd,
+        excludeSlotId: editorExistingId,
+      });
+      if (clash) {
+        const where = sectionLabel(clash.sectionId);
+        showToast({
+          type: 'error',
+          title: 'Teacher unavailable',
+          message: `${teacher.user?.name ?? 'This teacher'} is already assigned${where ? ` to ${where}` : ' elsewhere'} on ${editorDay} at ${clash.startTime}–${clash.endTime}.`,
+        });
+        setSubmitting(false);
+        return;
+      }
       await setTimetableSlot({
         sectionId: selectedSectionId,
         day: editorDay,
@@ -320,9 +372,19 @@ export default function TimetablePage() {
                   style={{ gridTemplateColumns: `100px repeat(${days.length}, 1fr)` }}
                 >
                   {/* Period label */}
-                  <div className="bg-[var(--card-bg)] px-3 py-3 flex flex-col justify-center">
-                    <p className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">P{i + 1}</p>
-                    <p className="text-[0.625rem] text-[var(--text-muted)]">{row.start} – {row.end}</p>
+                  <div className="bg-[var(--card-bg)] px-3 py-3 flex items-center justify-between gap-1 group/period">
+                    <div className="flex flex-col justify-center min-w-0">
+                      <p className="font-display text-[0.875rem] font-bold text-[var(--text-primary)]">P{i + 1}</p>
+                      <p className="text-[0.625rem] text-[var(--text-muted)]">{row.start} – {row.end}</p>
+                    </div>
+                    <button
+                      onClick={() => handleRemovePeriod(row)}
+                      disabled={!activeYear}
+                      title="Remove period"
+                      className="shrink-0 opacity-0 group-hover/period:opacity-100 transition-opacity text-[var(--text-ghost)] hover:text-red-500 disabled:opacity-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {/* Day cells */}
