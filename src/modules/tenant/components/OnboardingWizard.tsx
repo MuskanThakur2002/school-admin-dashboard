@@ -35,18 +35,21 @@ const boardOptions = [
 ];
 
 const planOptions: { value: TenantPlan; label: string; desc: string; price: string }[] = [
+  { value: 'trial', label: 'Trial', desc: '14-day free trial, all modules', price: 'Free' },
   { value: 'starter', label: 'Starter', desc: 'Up to 500 students, basic modules', price: '₹5,000/mo' },
   { value: 'growth', label: 'Growth', desc: 'Up to 2,000 students, all modules', price: '₹12,000/mo' },
   { value: 'enterprise', label: 'Enterprise', desc: 'Unlimited students, API access, priority support', price: '₹25,000/mo' },
 ];
 
 const planColors: Record<TenantPlan, string> = {
+  trial: 'border-emerald-300 bg-emerald-50',
   starter: 'border-slate-300 bg-slate-50',
   growth: 'border-blue-300 bg-blue-50',
   enterprise: 'border-violet-300 bg-violet-50',
 };
 
 const planSelectedColors: Record<TenantPlan, string> = {
+  trial: 'border-emerald-500 bg-emerald-50 shadow-[0_0_0_2px_rgba(16,185,129,0.2)]',
   starter: 'border-slate-500 bg-slate-50 shadow-[0_0_0_2px_rgba(100,116,139,0.2)]',
   growth: 'border-blue-500 bg-blue-50 shadow-[0_0_0_2px_rgba(59,130,246,0.2)]',
   enterprise: 'border-violet-500 bg-violet-50 shadow-[0_0_0_2px_rgba(139,92,246,0.2)]',
@@ -182,8 +185,8 @@ export function OnboardingWizard({ open, onOpenChange, onSubmit }: OnboardingWiz
         <div className="space-y-4">
           <Input label="School Name" placeholder="e.g. Delhi Public School — Noida" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="City" placeholder="e.g. Noida" value={city} onChange={(e) => setCity(e.target.value)} error={errors.city} />
             <Select label="State" options={stateOptions} value={state} onChange={(e) => setState(e.target.value)} placeholder="Select state" error={errors.state} />
+            <Input label="City" placeholder="e.g. Noida" value={city} onChange={(e) => setCity(e.target.value)} error={errors.city} />
           </div>
           <Select label="Board / Affiliation" options={boardOptions} value={board} onChange={(e) => setBoard(e.target.value)} />
         </div>

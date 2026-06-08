@@ -199,6 +199,10 @@ let housesDb: House[] = [
 // ─── Helpers ───────────────────────────────────────────────
 const sortClasses = (arr: ClassGroup[]) => [...arr].sort((a, b) => a.gradeLevel - b.gradeLevel);
 
+/** True when [aStart, aEnd) and [bStart, bEnd) overlap. Times are "HH:MM" (lexical-safe). */
+const timesOverlap = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
+  aStart < bEnd && bStart < aEnd;
+
 // ═════════════════════════════════════════════════════════════════
 // PUBLIC API
 // ═════════════════════════════════════════════════════════════════
@@ -493,6 +497,46 @@ export const academicApi = {
       teacher: dto.teacher,
       startTime: trimTime(b.startTime),
       endTime: trimTime(b.endTime),
+    };
+  },
+
+  /**
+   * Returns a conflicting slot if `teacherId` is already booked on the same day
+   * at an overlapping time anywhere in the academic year (any class/section),
+   * excluding `excludeSlotId`. Used to stop a teacher being double-booked.
+   */
+  findTeacherClash: async (params: {
+    teacherId: string;
+    academicYearId: string;
+    day: DayOfWeek;
+    startTime: string;
+    endTime: string;
+    excludeSlotId?: string;
+  }): Promise<TimetableSlot | null> => {
+    const schoolId = resolveSchoolId();
+    const res = await api.get<PaginatedEnvelope<BackendTimetableSlot>>(
+      `/schools/${schoolId}/timetable-slots?academicYearId=${params.academicYearId}&page=1&limit=500`,
+    );
+    const dayNum = numByDay[params.day];
+    const clash = (res.data ?? []).find(
+      (b) =>
+        b.teacherId === params.teacherId &&
+        b.academicYearId === params.academicYearId &&
+        b.dayOfWeek === dayNum &&
+        b.id !== params.excludeSlotId &&
+        timesOverlap(trimTime(b.startTime), trimTime(b.endTime), params.startTime, params.endTime),
+    );
+    if (!clash) return null;
+    return {
+      id: clash.id,
+      sectionId: clash.classSectionId,
+      day: dayByNum[clash.dayOfWeek] ?? params.day,
+      subjectId: clash.subjectId,
+      subjectName: clash.subject?.name ?? '',
+      teacherId: clash.teacherId,
+      teacher: clash.teacher?.user?.name ?? '',
+      startTime: trimTime(clash.startTime),
+      endTime: trimTime(clash.endTime),
     };
   },
 

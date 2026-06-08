@@ -8,16 +8,19 @@ import {
 import { cn } from '@/utils/cn';
 import { useStudentsStore } from '@/stores/students.store';
 import { useEnrollmentStore } from '@/stores/enrollment.store';
+import { useParentStore } from '@/stores/parent.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAcademicStore } from '@/stores/academic.store';
 import { useUIStore } from '@/stores/ui.store';
 import { studentsApi } from '@/services/modules/students.api';
 import { enrollmentsApi } from '@/services/modules/enrollments.api';
 import { attendanceApi } from '@/services/modules/attendance.api';
+import { ledgerApi } from '@/services/modules/ledger.api';
 import { isSuperAdmin } from '@/types/auth.types';
 import { EditStudentModal } from '@/modules/students/components/EditStudentModal';
 import { EditEnrollmentModal } from '@/modules/students/components/EditEnrollmentModal';
 import type { Student, StudentEnrollment } from '@/types/student.types';
+import type { Parent } from '@/types/parent.types';
 import type { AttendanceRecord } from '@/types/attendance.types';
 import type { ApplicationDocument } from '@/types/admissions.types';
 
@@ -49,6 +52,7 @@ export default function StudentProfilePage() {
   const navigate = useNavigate();
   const getStudent = useStudentsStore((s) => s.getStudent);
   const uploadAvatar = useStudentsStore((s) => s.uploadAvatar);
+  const getParent = useParentStore((s) => s.getParent);
 
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +68,12 @@ export default function StudentProfilePage() {
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState<string | null>(null);
+
+  const [guardian, setGuardian] = useState<Parent | null>(null);
+  const [guardianLoading, setGuardianLoading] = useState(false);
+
+  const [fees, setFees] = useState<{ totalDue: number; totalPaid: number; balance: number } | null>(null);
+  const [feesLoading, setFeesLoading] = useState(false);
 
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
@@ -130,6 +140,22 @@ export default function StudentProfilePage() {
       .catch((err) => setDocsError((err as Error).message))
       .finally(() => setDocsLoading(false));
   }, [student?.id]);
+
+  // Load the linked guardian so the profile shows father/mother inline.
+  useEffect(() => {
+    const parentId = student?.parentId;
+    if (!parentId) {
+      setGuardian(null);
+      return;
+    }
+    let cancelled = false;
+    setGuardianLoading(true);
+    getParent(parentId)
+      .then((p) => { if (!cancelled) setGuardian(p); })
+      .catch(() => { if (!cancelled) setGuardian(null); })
+      .finally(() => { if (!cancelled) setGuardianLoading(false); });
+    return () => { cancelled = true; };
+  }, [student?.parentId, getParent]);
 
   // Need class names to label enrollments.
   useEffect(() => {
@@ -210,6 +236,36 @@ export default function StudentProfilePage() {
       .then((res) => setAttendance(res.data))
       .catch((err) => setAttendanceError((err as Error).message))
       .finally(() => setAttendanceLoading(false));
+  }, [currentEnrollment?.id]);
+
+  // Fee summary for the current enrollment, derived from ledger entries.
+  useEffect(() => {
+    if (!currentEnrollment?.id) {
+      setFees(null);
+      return;
+    }
+    const { user, activeSchoolId } = useAuthStore.getState();
+    const schoolId = isSuperAdmin(user) ? activeSchoolId : user?.schoolId ?? null;
+    if (!schoolId) return;
+
+    let cancelled = false;
+    setFeesLoading(true);
+    ledgerApi
+      .list(schoolId, { studentEnrollmentId: currentEnrollment.id, limit: 500 })
+      .then((res) => {
+        if (cancelled) return;
+        let totalDue = 0;
+        let totalPaid = 0;
+        for (const e of res.data) {
+          const amt = Number(e.amount) || 0;
+          if (e.entryType === 'Debit') totalDue += amt;
+          else if (e.entryType === 'Credit') totalPaid += amt;
+        }
+        setFees({ totalDue, totalPaid, balance: totalDue - totalPaid });
+      })
+      .catch(() => { if (!cancelled) setFees(null); })
+      .finally(() => { if (!cancelled) setFeesLoading(false); });
+    return () => { cancelled = true; };
   }, [currentEnrollment?.id]);
 
   const attendanceCounts = useMemo(() => {
@@ -391,15 +447,54 @@ export default function StudentProfilePage() {
           </div>
         </SectionCard>
 
+        <SectionCard title="Fees" icon={Wallet}>
+          {feesLoading ? (
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">Loading fees…</p>
+          ) : !currentEnrollment ? (
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">Enrol the student to track fees.</p>
+          ) : fees ? (
+            <>
+              <div className="grid grid-cols-2 gap-x-6">
+                <Field label="Total Billed" value={`₹${fees.totalDue.toLocaleString('en-IN')}`} />
+                <Field label="Total Paid" value={`₹${fees.totalPaid.toLocaleString('en-IN')}`} />
+                <Field label="Balance" value={`₹${fees.balance.toLocaleString('en-IN')}`} />
+              </div>
+              <button
+                onClick={() => navigate(`/ledger/${currentEnrollment.id}`)}
+                className="mt-1 text-left text-[0.75rem] font-semibold text-[#002c98] hover:underline"
+              >
+                View full ledger →
+              </button>
+            </>
+          ) : (
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">No fee records yet.</p>
+          )}
+        </SectionCard>
+
         <SectionCard title="Guardian" icon={Users}>
-          <div className="grid grid-cols-1 gap-x-6">
-            <button
-              onClick={() => navigate(`/parents/${student.parentId}`)}
-              className="mt-1 text-left text-[0.75rem] font-semibold text-[#002c98] hover:underline"
-            >
-              View guardian profile →
-            </button>
-          </div>
+          {guardianLoading ? (
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">Loading guardian…</p>
+          ) : guardian ? (
+            <>
+              <div className="grid grid-cols-2 gap-x-6">
+                <Field label="Guardian Name" value={guardian.user?.name ?? ''} />
+                <Field label="Phone" value={guardian.user?.phoneNumber ?? ''} />
+                <Field label="Father's Name" value={guardian.fatherName ?? ''} />
+                <Field label="Mother's Name" value={guardian.motherName ?? ''} />
+                <Field label="Email" value={guardian.user?.email ?? ''} />
+              </div>
+              {student.parentId && (
+                <button
+                  onClick={() => navigate(`/parents/${student.parentId}`)}
+                  className="mt-1 text-left text-[0.75rem] font-semibold text-[#002c98] hover:underline"
+                >
+                  View guardian profile →
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="text-[0.8125rem] text-[var(--text-muted)] py-2">No guardian linked.</p>
+          )}
         </SectionCard>
 
         <SectionCard title="Other" icon={Building2}>

@@ -236,11 +236,15 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
     hireDate: today,
   });
   const [saving, setSaving] = useState(false);
+  const [whatsappSameAsPhone, setWhatsappSameAsPhone] = useState(false);
 
-  const reset = () => setForm({
-    name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
-    employeeId: '', hireDate: today,
-  });
+  const reset = () => {
+    setForm({
+      name: '', email: '', password: '', phoneNumber: '', address: '', whatsapp: '',
+      employeeId: '', hireDate: today,
+    });
+    setWhatsappSameAsPhone(false);
+  };
 
   const handleClose = (next: boolean) => {
     if (!next) reset();
@@ -249,6 +253,22 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
 
   const update = <K extends keyof typeof form>(key: K, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // Phone & WhatsApp accept digits only (max 10). When "same as phone" is on,
+  // WhatsApp mirrors the phone number.
+  const updatePhone = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 10);
+    setForm((f) => ({
+      ...f,
+      phoneNumber: digits,
+      ...(whatsappSameAsPhone ? { whatsapp: digits } : {}),
+    }));
+  };
+
+  const toggleWhatsappSame = (checked: boolean) => {
+    setWhatsappSameAsPhone(checked);
+    if (checked) setForm((f) => ({ ...f, whatsapp: f.phoneNumber }));
+  };
 
   const canSubmit =
     form.name.trim() &&
@@ -304,11 +324,22 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
         <div>
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">User account</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Pramod Kumar" />
+            <Input label="Full name *" value={form.name} onChange={(e) => update('name', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} placeholder="e.g., Pramod Kumar" />
             <Input label="Email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="teacher@school.edu" />
             <Input label="Password *" type="password" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Initial password" />
-            <Input label="Phone" value={form.phoneNumber} onChange={(e) => update('phoneNumber', e.target.value)} placeholder="9311314401" />
-            <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="9311314401" />
+            <Input label="Phone" inputMode="numeric" value={form.phoneNumber} onChange={(e) => updatePhone(e.target.value)} placeholder="9311314401" />
+            <div>
+              <Input label="WhatsApp" inputMode="numeric" value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9311314401" disabled={whatsappSameAsPhone} />
+              <label className="mt-1.5 flex items-center gap-2 text-[0.75rem] text-[var(--text-secondary)] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={whatsappSameAsPhone}
+                  onChange={(e) => toggleWhatsappSame(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-[var(--border-default)] accent-[#002c98] cursor-pointer"
+                />
+                Same as phone number
+              </label>
+            </div>
             <div className="md:col-span-2">
               <Input label="Address" value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="Street, city, state" />
             </div>
@@ -318,7 +349,7 @@ function AddTeacherModal({ open, onOpenChange, onCreate, onSuccess, onError }: A
         <div>
           <p className="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-3">Teacher details</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Employee ID *" value={form.employeeId} onChange={(e) => update('employeeId', e.target.value)} placeholder="EMP-001" />
+            <Input label="Employee ID *" value={form.employeeId} onChange={(e) => update('employeeId', e.target.value.toUpperCase())} placeholder="EMP-001" />
             <Input label="Hire date *" type="date" value={form.hireDate} onChange={(e) => update('hireDate', e.target.value)} />
           </div>
         </div>

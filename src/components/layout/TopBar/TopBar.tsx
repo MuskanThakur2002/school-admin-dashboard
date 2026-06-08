@@ -17,16 +17,23 @@ export function TopBar() {
     <header
       className={cn(
         'fixed top-0 right-0 z-20 h-[68px] flex items-center justify-between',
-        'px-8 glass',
+        'px-4 md:px-8 glass',
         'shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]',
         'transition-all duration-300',
         collapsed ? 'left-0 md:left-[72px]' : 'left-0 md:left-[250px]',
       )}
     >
-      {/* Search */}
+      {/* Search — full input on desktop, icon-only on mobile */}
       <div className="flex-1 max-w-lg">
+        <button
+          className="md:hidden p-2.5 rounded-xl transition-all"
+          style={{ color: 'var(--text-tertiary)' }}
+          aria-label="Search"
+        >
+          <Search className="w-[18px] h-[18px]" strokeWidth={1.8} />
+        </button>
         <div
-          className="flex items-center gap-2.5 w-full rounded-xl px-4 py-2.5 transition-all"
+          className="hidden md:flex items-center gap-2.5 w-full rounded-xl px-4 py-2.5 transition-all"
           style={{ background: 'var(--card-bg-subtle)' }}
         >
           <Search className="w-4 h-4" style={{ color: 'var(--text-muted)' }} strokeWidth={2} />
@@ -66,9 +73,9 @@ export function TopBar() {
           )}
         </button>
 
-        {/* Notifications */}
+        {/* Notifications — hidden on mobile (covered by BottomNav → Alerts) */}
         <button
-          className="relative p-2.5 rounded-xl transition-all group"
+          className="hidden md:inline-flex relative p-2.5 rounded-xl transition-all group"
           style={{ color: 'var(--text-tertiary)' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--card-bg-hover)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
@@ -81,7 +88,7 @@ export function TopBar() {
         </button>
 
         {/* Divider */}
-        <div className="w-px h-8 mx-1" style={{ background: 'var(--border-default)' }} />
+        <div className="hidden md:block w-px h-8 mx-1" style={{ background: 'var(--border-default)' }} />
 
         {/* User profile */}
         <button

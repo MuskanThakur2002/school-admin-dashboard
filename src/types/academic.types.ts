@@ -90,7 +90,7 @@ export interface Subject {
 
 export interface CreateSubjectDto {
   name: string;
-  code: string;
+  code?: string;
 }
 
 export type UpdateSubjectDto = Partial<CreateSubjectDto>;

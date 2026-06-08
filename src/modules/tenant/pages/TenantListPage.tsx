@@ -9,6 +9,7 @@ import { OnboardingWizard } from '../components/OnboardingWizard';
 import type { TenantPlan, TenantStatus, CreateTenantDto } from '@/types/tenant.types';
 
 const planStyle: Record<TenantPlan, { bg: string; text: string }> = {
+  trial: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   starter: { bg: 'bg-slate-50', text: 'text-slate-600' },
   growth: { bg: 'bg-blue-50', text: 'text-blue-700' },
   enterprise: { bg: 'bg-violet-50', text: 'text-violet-700' },

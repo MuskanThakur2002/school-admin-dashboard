@@ -1,4 +1,4 @@
-export type TenantPlan = 'starter' | 'growth' | 'enterprise';
+export type TenantPlan = 'trial' | 'starter' | 'growth' | 'enterprise';
 export type TenantStatus = 'active' | 'onboarding' | 'suspended';
 
 export interface TenantBranding {

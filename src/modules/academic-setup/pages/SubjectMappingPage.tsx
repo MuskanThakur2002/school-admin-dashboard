@@ -43,17 +43,18 @@ export default function SubjectMappingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formName || !formCode) {
-      showToast({ type: 'error', title: 'Missing fields', message: 'Subject name and code are required' });
+    if (!formName) {
+      showToast({ type: 'error', title: 'Missing fields', message: 'Subject name is required' });
       return;
     }
+    const code = formCode.trim() ? formCode.toUpperCase() : undefined;
     setSubmitting(true);
     try {
       if (editingId) {
-        await updateSubject(editingId, { name: formName, code: formCode.toUpperCase() });
+        await updateSubject(editingId, { name: formName, code });
         showToast({ type: 'success', title: 'Subject updated', message: formName });
       } else {
-        await createSubject({ name: formName, code: formCode.toUpperCase() });
+        await createSubject({ name: formName, code });
         showToast({ type: 'success', title: 'Subject added', message: formName });
       }
       setModalOpen(false);
@@ -158,7 +159,7 @@ export default function SubjectMappingPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input label="Subject Name *" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Economics" />
-            <Input label="Subject Code *" value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="e.g. ECO" />
+            <Input label="Subject Code" value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="e.g. ECO (optional)" />
           </div>
         </div>
       </Modal>
