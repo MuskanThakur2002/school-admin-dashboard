@@ -73,7 +73,7 @@ export function SchoolSwitcher() {
 
       {open && (
         <div
-          className="absolute top-full right-0 mt-2 w-[320px] rounded-xl shadow-lg z-40 overflow-hidden"
+          className="fixed top-[72px] inset-x-4 w-auto md:absolute md:top-full md:inset-x-auto md:right-0 md:mt-2 md:w-[320px] rounded-xl shadow-lg z-40 overflow-hidden"
           style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-default)',
