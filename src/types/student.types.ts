@@ -2,6 +2,18 @@ import type { School } from '@/types/school.types';
 
 export type StudentGender = 'Male' | 'Female' | 'Other';
 
+// Enrollment + class info embedded in the parent-scoped students response (for
+// the "My Child" hub). Only present on the parent path.
+export interface ChildEnrollment {
+  id: string;
+  classSectionId: string;
+  status: string | null;
+  classSection?: {
+    section: string;
+    classMaster?: { name: string };
+  };
+}
+
 export interface Student {
   id: string;
   schoolId: string;
@@ -23,6 +35,8 @@ export interface Student {
   createdAt: string;
   updatedAt: string;
   school?: School;
+  // Present only on the parent-scoped response (see ChildEnrollment).
+  enrollments?: ChildEnrollment[];
 }
 
 export interface CreateStudentDto {

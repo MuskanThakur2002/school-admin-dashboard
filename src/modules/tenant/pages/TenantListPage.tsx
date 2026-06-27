@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Plus, Users, CheckCircle2, Clock, MapPin, Globe, Settings, ArrowRight } from 'lucide-react';
+import { Building2, Plus, Users, CheckCircle2, Clock, MapPin, Globe, Settings, ArrowRight, Search, X } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -36,6 +36,7 @@ export default function TenantListPage() {
   };
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (tenants.length === 0) fetchTenants();
@@ -43,6 +44,18 @@ export default function TenantListPage() {
 
   const totalStudents = tenants.reduce((s, t) => s + t.students, 0);
   const activeTenants = tenants.filter((t) => t.status === 'active').length;
+
+  const filteredTenants = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tenants;
+    return tenants.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.domain.toLowerCase().includes(q) ||
+        t.city.toLowerCase().includes(q) ||
+        t.state.toLowerCase().includes(q),
+    );
+  }, [tenants, search]);
 
   const handleOnboard = async (dto: CreateTenantDto) => {
     await createTenant(dto);
@@ -80,6 +93,25 @@ export default function TenantListPage() {
         ))}
       </div>
 
+      {/* Search */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" strokeWidth={2} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, domain or location..."
+            className="w-full bg-[var(--card-bg)] rounded-xl pl-10 pr-9 py-2.5 text-[0.8125rem] text-[var(--text-primary)] placeholder:text-[var(--text-ghost)] outline-none shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus:shadow-[0_0_0_2px_rgba(0,44,152,0.12)] transition-shadow"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-tertiary)]">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Loading skeleton */}
       {loading && tenants.length === 0 && (
         <div className="space-y-3">
@@ -99,7 +131,7 @@ export default function TenantListPage() {
 
       {/* Tenant cards */}
       <div className="space-y-3">
-        {tenants.map((tenant) => {
+        {filteredTenants.map((tenant) => {
           const ps = planStyle[tenant.plan];
           const ss = statusStyle[tenant.status];
           return (
@@ -157,6 +189,14 @@ export default function TenantListPage() {
             </div>
           );
         })}
+
+        {!loading && filteredTenants.length === 0 && (
+          <div className="bg-[var(--card-bg)] rounded-2xl py-16 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <Search className="w-10 h-10 text-[#e2e8f0] mx-auto mb-3" />
+            <p className="text-[0.875rem] font-medium text-[var(--text-muted)]">No schools found</p>
+            <p className="text-[0.75rem] text-[var(--text-ghost)] mt-1">{search ? 'Try adjusting your search' : 'Onboard your first school to get started'}</p>
+          </div>
+        )}
       </div>
 
       {/* Onboarding Wizard */}

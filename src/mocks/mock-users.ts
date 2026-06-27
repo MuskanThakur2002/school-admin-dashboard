@@ -1,44 +1,15 @@
 import { SUPER_ADMIN_ROLE } from '@/types/auth.types';
 import type { LoginResponseData, User } from '@/types/auth.types';
+import { PERMISSIONS } from '@/constants/permissions';
 
 interface MockAccount {
   password: string;
   user: User;
 }
 
-const allPermissions = [
-  'dashboard.read',
-  'admissions.read',
-  'admissions.write',
-  'academic.read',
-  'academic.write',
-  'students.read',
-  'students.write',
-  'teachers.read',
-  'teachers.write',
-  'attendance.read',
-  'attendance.write',
-  'homework.read',
-  'homework.write',
-  'assessments.read',
-  'assessments.write',
-  'marks.read',
-  'marks.write',
-  'parents.read',
-  'parents.write',
-  'fees.read',
-  'fees.write',
-  'ledger.read',
-  'expenses.read',
-  'receipts.read',
-  'notifications.read',
-  'reports.read',
-  'settings.manage',
-  'CREATE_SCHOOL',
-  'READ_SCHOOL',
-  'UPDATE_SCHOOL',
-  'DELETE_SCHOOL',
-];
+// Backend permission vocabulary — keep mock logins consistent with what the
+// real API returns (see src/constants/permissions.ts).
+const allPermissions: string[] = Object.values(PERMISSIONS);
 
 const schoolAdminPermissions = allPermissions.filter(
   (p) => !['CREATE_SCHOOL', 'UPDATE_SCHOOL', 'DELETE_SCHOOL'].includes(p),
