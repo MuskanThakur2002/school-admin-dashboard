@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { isSuperAdmin } from '@/types/auth.types';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://school.qbitlog.com/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://sms.qbitlog.com/api';
 
 class ApiError extends Error {
   status: number;

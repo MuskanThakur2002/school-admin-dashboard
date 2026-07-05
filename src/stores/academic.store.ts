@@ -82,7 +82,18 @@ export const useAcademicStore = create<AcademicState>((set) => ({
 
   createYear: async (dto) => {
     const created = await academicApi.createYear(dto);
-    set((state) => ({ years: [created, ...state.years] }));
+    if (dto.isCurrent) {
+      // The create endpoint doesn't demote the previously-current year, so we
+      // clear any other still-current year here to keep a single active year.
+      const all = await academicApi.getYears();
+      await Promise.all(
+        all
+          .filter((y) => y.isCurrent && y.id !== created.id)
+          .map((y) => academicApi.updateYear(y.id, { isCurrent: false })),
+      );
+    }
+    const fresh = await academicApi.getYears();
+    set({ years: fresh });
     return created;
   },
 

@@ -1,4 +1,4 @@
-import { Search, Bell, LogOut, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Search, LogOut, ChevronDown, Sun, Moon } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUIStore } from '@/stores/ui.store';
@@ -71,20 +71,6 @@ export function TopBar() {
           ) : (
             <Sun className="w-[18px] h-[18px]" strokeWidth={1.8} />
           )}
-        </button>
-
-        {/* Notifications — hidden on mobile (covered by BottomNav → Alerts) */}
-        <button
-          className="hidden md:inline-flex relative p-2.5 rounded-xl transition-all group"
-          style={{ color: 'var(--text-tertiary)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--card-bg-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <Bell className="w-[18px] h-[18px]" strokeWidth={1.8} />
-          <span
-            className="absolute top-2 right-2 w-2 h-2 rounded-full ring-2"
-            style={{ background: 'var(--status-danger)', '--tw-ring-color': 'var(--card-bg)' } as React.CSSProperties}
-          />
         </button>
 
         {/* Divider */}
