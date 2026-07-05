@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/Input/Input';
 import { Select } from '@/components/ui/Select/Select';
 import { Button } from '@/components/ui/Button/Button';
 import { Pagination } from '@/components/ui/Pagination/Pagination';
+import { usePermission } from '@/hooks/usePermission';
+import { PERMISSIONS } from '@/constants/permissions';
 import { useUIStore } from '@/stores/ui.store';
 import { useHomeworkStore } from '@/stores/homework.store';
 import { useAcademicStore } from '@/stores/academic.store';
@@ -69,6 +71,10 @@ export default function HomeworkListPage() {
 
   const showToast = useUIStore((s) => s.showToast);
   const navigate = useNavigate();
+
+  // Write actions (assign / edit / delete) require MANAGE_HOMEWORK. A user with
+  // only READ_HOMEWORK reaches this page via the route guard but sees it read-only.
+  const canManage = usePermission(PERMISSIONS.MANAGE_HOMEWORK);
 
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -147,15 +153,17 @@ export default function HomeworkListPage() {
           <h1 className="font-display text-[1.625rem] font-bold text-[var(--text-primary)] tracking-[-0.02em]">Homework</h1>
           <p className="text-[0.875rem] text-[var(--text-muted)] mt-1">{total} assignments</p>
         </div>
-        <div className="flex gap-2.5">
-          <button
-            onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Add Homework
-          </button>
-        </div>
+        {canManage && (
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#002c98] text-white text-[0.8125rem] font-semibold shadow-[0_2px_8px_rgba(0,44,152,0.3)] hover:shadow-[0_4px_16px_rgba(0,44,152,0.35)] hover:brightness-110 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Add Homework
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -229,20 +237,24 @@ export default function HomeworkListPage() {
               <span>{h.dueDate}</span>
             </div>
             <div className="flex gap-1 justify-self-end">
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditing(h); }}
-                className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[#002c98] hover:bg-[var(--brand-tint)] transition-colors"
-                aria-label="Edit homework"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={(e) => handleDelete(e, h)}
-                className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
-                aria-label="Delete homework"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {canManage && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditing(h); }}
+                    className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[#002c98] hover:bg-[var(--brand-tint)] transition-colors"
+                    aria-label="Edit homework"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(e, h)}
+                    className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
+                    aria-label="Delete homework"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ))}

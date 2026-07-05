@@ -54,6 +54,15 @@ export interface MarkSubject {
   updatedAt?: string;
 }
 
+// Assessment embedded in a StudentMark GET response (subset of Assessment).
+export interface MarkAssessment {
+  id: string;
+  name: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  maxMarks: string | number;
+}
+
 export interface StudentMark {
   id: string;
   schoolId: string;
@@ -68,6 +77,7 @@ export interface StudentMark {
   createdAt: string;
   updatedAt: string;
   subject?: MarkSubject;
+  assessment?: MarkAssessment;
 }
 
 export interface CreateStudentMarkDto {

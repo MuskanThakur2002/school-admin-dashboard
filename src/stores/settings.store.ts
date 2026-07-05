@@ -165,7 +165,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const schoolId = resolveSchoolId();
     const created = await rolesApi.create(schoolId, {
       name: 'Parent',
-      permissions: ['READ_STUDENT', 'READ_ATTENDANCE', 'READ_HOMEWORK', 'READ_MARKS'],
+      // Mirrors backend DEFAULT_ROLE_PERMISSIONS[Parent]. READ_TEACHER is scoped
+      // to the child's class teachers; no READ_PARENT (no guardians list).
+      permissions: ['READ_USER', 'READ_TEACHER', 'READ_STUDENT', 'READ_ATTENDANCE', 'READ_HOMEWORK', 'READ_MARKS', 'READ_LEDGER'],
     });
     set((s) => ({ roles: [created, ...s.roles] }));
     return created;

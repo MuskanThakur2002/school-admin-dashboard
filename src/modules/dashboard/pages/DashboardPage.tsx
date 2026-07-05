@@ -26,6 +26,9 @@ import { cn } from '@/utils/cn';
 import { useThemeStore } from '@/stores/theme.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { isSuperAdmin } from '@/types/auth.types';
+import { ROLES } from '@/constants/permissions';
+import { ParentDashboard } from '@/modules/dashboard/components/ParentDashboard';
+import { TeacherDashboard } from './TeacherDashboard';
 import { studentsApi } from '@/services/modules/students.api';
 import { paymentApi } from '@/services/modules/payment.api';
 import { ledgerApi } from '@/services/modules/ledger.api';
@@ -197,9 +200,9 @@ function buildAdmissionPipeline(
   return buckets.map((b) => ({ week: b.label, enquiries: b.enquiries, applications: b.applications }));
 }
 
-// ─── Dashboard Page ─────────────────────────────────────────
+// ─── Admin Dashboard ────────────────────────────────────────
 
-export function DashboardPage() {
+function AdminDashboard() {
   const navigate = useNavigate();
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -511,6 +514,19 @@ export function DashboardPage() {
       </div>
     </div>
   );
+}
+
+// ─── Dashboard Page (role switch) ───────────────────────────
+
+export function DashboardPage() {
+  const user = useAuthStore((s) => s.user);
+  // Parents and teachers each get a focused, role-scoped home; everyone else
+  // (admins, accountants, managers, super admins) keeps the admin/finance overview.
+  if (!isSuperAdmin(user)) {
+    if (user?.roleName === ROLES.PARENT) return <ParentDashboard />;
+    if (user?.roleName === ROLES.TEACHER) return <TeacherDashboard />;
+  }
+  return <AdminDashboard />;
 }
 
 export default DashboardPage;

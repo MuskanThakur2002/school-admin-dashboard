@@ -2,21 +2,30 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, GraduationCap, Users, UserCog, HeartHandshake, Wallet, BookOpen,
   Receipt, Bell, Building2, Settings, ClipboardCheck, ClipboardList,
-  NotebookPen, ChevronLeft, ChevronRight, Sparkles, ListChecks, UserCheck,
+  NotebookPen, ChevronLeft, ChevronRight, Sparkles, ListChecks, UserCheck, Award, UserRound,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTenantStore } from '@/stores/tenant.store';
 import { usePermission } from '@/hooks/usePermission';
+import { PERMISSIONS, ROLES } from '@/constants/permissions';
 import { isSuperAdmin } from '@/types/auth.types';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
-  permission?: string;
+  // Backend permission name(s). An array means "shown if the user has ANY".
+  permission?: string | string[];
   superAdminOnly?: boolean;
+  // Restrict to specific role name(s) instead of a permission. Used when a
+  // screen is meant for one persona (e.g. parent-only Results), since a
+  // permission alone can't express "Parent but not staff".
+  roles?: string[];
+  // Hide from specific role name(s) even if they hold the permission. Used to
+  // keep parents out of the staff/admin pages (they get the My Child hub instead).
+  hideForRoles?: string[];
   // If true, only highlights on exact path match (no prefix). Use for parent
   // entries that have more-specific sibling routes in the sidebar.
   end?: boolean;
@@ -24,35 +33,44 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Admissions', path: '/admissions', icon: UserPlus, permission: 'admissions.read' },
-  { label: 'Academic', path: '/academic', icon: GraduationCap, permission: 'academic.read' },
-  { label: 'Students', path: '/students', icon: Users, permission: 'students.read' },
-  { label: 'Teachers', path: '/teachers', icon: UserCog, permission: 'teachers.read' },
-  { label: 'Student Attendance', path: '/attendance', icon: ClipboardCheck, permission: 'attendance.read' },
-  { label: 'Staff Attendance', path: '/teacher-attendance', icon: UserCheck, permission: 'attendance.read' },
-  { label: 'Homework', path: '/homework', icon: NotebookPen, permission: 'homework.read' },
-  { label: 'Exams', path: '/assessments', icon: ListChecks, permission: 'assessments.read' },
-  { label: 'Guardians', path: '/parents', icon: HeartHandshake, permission: 'parents.read' },
-  { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: 'fees.read', end: true },
-  { label: 'Fee Assignments', path: '/fees/assignments', icon: ClipboardList, permission: 'fees.read' },
-  { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: 'ledger.read' },
+  { label: 'My Child', path: '/my-child', icon: UserRound, roles: [ROLES.PARENT] },
+  { label: 'Admissions', path: '/admissions', icon: UserPlus, permission: [PERMISSIONS.MANAGE_ENQUIRIES, PERMISSIONS.MANAGE_APPLICATIONS] },
+  { label: 'Academic', path: '/academic', icon: GraduationCap, permission: [PERMISSIONS.MANAGE_CLASSES, PERMISSIONS.MANAGE_SUBJECTS, PERMISSIONS.MANAGE_TIMETABLE] },
+  { label: 'Students', path: '/students', icon: Users, permission: PERMISSIONS.READ_STUDENT, hideForRoles: [ROLES.PARENT] },
+  { label: 'Teachers', path: '/teachers', icon: UserCog, permission: PERMISSIONS.READ_TEACHER, hideForRoles: [ROLES.PARENT, ROLES.TEACHER] },
+  { label: 'Student Attendance', path: '/attendance', icon: ClipboardCheck, permission: PERMISSIONS.READ_ATTENDANCE, hideForRoles: [ROLES.PARENT] },
+  { label: 'Staff Attendance', path: '/teacher-attendance', icon: UserCheck, permission: PERMISSIONS.READ_TEACHER_ATTENDANCE },
+  { label: 'Homework', path: '/homework', icon: NotebookPen, permission: PERMISSIONS.READ_HOMEWORK, hideForRoles: [ROLES.PARENT] },
+  { label: 'Exams', path: '/assessments', icon: ListChecks, permission: PERMISSIONS.MANAGE_ASSESSMENTS },
+  { label: 'Results', path: '/results', icon: Award, roles: [ROLES.PARENT] },
+  { label: 'Fees', path: '/my-fees', icon: Wallet, roles: [ROLES.PARENT] },
+  { label: 'Guardians', path: '/parents', icon: HeartHandshake, permission: PERMISSIONS.READ_PARENT, hideForRoles: [ROLES.TEACHER] },
+  { label: 'Fee Engine', path: '/fees', icon: Wallet, permission: PERMISSIONS.MANAGE_FEE_STRUCTURES, end: true },
+  { label: 'Fee Assignments', path: '/fees/assignments', icon: ClipboardList, permission: PERMISSIONS.MANAGE_FEE_ASSIGNMENTS },
+  { label: 'Ledger', path: '/ledger', icon: BookOpen, permission: PERMISSIONS.MANAGE_LEDGER },
   // TODO: re-enable when Expenses API is ready
-  // { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: 'expenses.read' },
-  { label: 'Receipts', path: '/receipts', icon: Receipt, permission: 'receipts.read' },
-  { label: 'Notifications', path: '/notifications', icon: Bell, permission: 'notifications.read' },
+  // { label: 'Expenses', path: '/expenses', icon: CreditCard, permission: ... },
+  { label: 'Receipts', path: '/receipts', icon: Receipt, permission: PERMISSIONS.COLLECT_FEES },
+  { label: 'Notifications', path: '/notifications', icon: Bell, permission: [PERMISSIONS.MANAGE_NOTIFICATIONS, PERMISSIONS.SEND_NOTIFICATIONS] },
   // TODO: re-enable when Reports API is ready
-  // { label: 'Reports', path: '/reports', icon: BarChart3, permission: 'reports.read' },
+  // { label: 'Reports', path: '/reports', icon: BarChart3, permission: ... },
   { label: 'Tenants', path: '/tenants', icon: Building2, superAdminOnly: true },
-  { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' },
+  { label: 'Settings', path: '/settings', icon: Settings, permission: PERMISSIONS.READ_ROLE },
 ];
 
 function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const user = useAuthStore((s) => s.user);
   const activeSchoolId = useAuthStore((s) => s.activeSchoolId);
-  const hasPermission = usePermission(item.permission ?? 'dashboard.read');
+  const hasPermission = usePermission(item.permission ?? []);
+
+  // Hidden for this role regardless of permission (e.g. parents use My Child).
+  if (item.hideForRoles && user && item.hideForRoles.includes(user.roleName)) return null;
 
   if (item.superAdminOnly) {
     if (!isSuperAdmin(user)) return null;
+  } else if (item.roles) {
+    // Role-restricted entry (e.g. parent-only Results) — show only to those roles.
+    if (!user || !item.roles.includes(user.roleName)) return null;
   } else if (isSuperAdmin(user)) {
     // Super admins only see school-scoped links once they've drilled into a school.
     if (!activeSchoolId) return null;
